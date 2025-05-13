@@ -23,6 +23,12 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "dev-secret-key")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # needed for url_for to generate with https
 
+# Configure Gunicorn timeout
+if os.environ.get('GUNICORN_TIMEOUT'):
+    timeout = int(os.environ.get('GUNICORN_TIMEOUT'))
+else:
+    timeout = 300  # 5 minutes timeout for large file uploads
+
 # Disabilitiamo la protezione CSRF per semplificare l'uso dell'applicazione
 csrf = CSRFProtect()
 csrf.init_app(app)
