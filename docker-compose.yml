@@ -18,6 +18,7 @@ services:
       - OMP_NUM_THREADS=1
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
       - MLFLOW_ARTIFACT_ROOT=/mlflow-artifacts
+      - GUNICORN_TIMEOUT=900
     depends_on:
       - mlflow
     deploy:

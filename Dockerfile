@@ -40,4 +40,4 @@ ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 ENV TORCH_DISTRIBUTED_DEBUG=DETAIL
 
 # Comando per avviare l'applicazione
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--reuse-port", "--workers", "2", "main:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--reuse-port", "--workers", "2", "--timeout", "900", "main:app"]
