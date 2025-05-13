@@ -1,0 +1,290 @@
+{% extends "layout.html" %}
+
+{% block title %}Configure Training - ML Training Pipeline{% endblock %}
+
+{% block head %}
+<style>
+    .variant-selector {
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+    }
+
+    .variant-selector:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb custom-breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Configure Training</li>
+            </ol>
+        </nav>
+
+        <h2 class="mb-4"><i class="fas fa-cogs me-2"></i>Configure Training</h2>
+
+        {% if model_type %}
+            <!-- Model Configuration -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ 'YOLO' if model_type == 'yolo' else 'RF-DETR' }} Model Configuration</h5>
+                    <!-- Toggle between model types -->
+                    <div class="btn-group" role="group">
+                        <a href="{{ url_for('configure_training', model_type='yolo') }}" class="btn btn-sm {{ 'btn-primary' if model_type == 'yolo' else 'btn-outline-primary' }}">YOLO</a>
+                        <a href="{{ url_for('configure_training', model_type='rf-detr') }}" class="btn btn-sm {{ 'btn-primary' if model_type == 'rf-detr' else 'btn-outline-primary' }}">RF-DETR</a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="">
+                        {{ form.hidden_tag() }}
+
+                        <div class="mb-3">
+                            <label for="job_name" class="form-label">Job Name</label>
+                            {{ form.job_name(class="form-control", id="job_name", placeholder="Enter a name for this training job") }}
+                            {% for error in form.job_name.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="dataset_id" class="form-label">Dataset</label>
+                            {{ form.dataset_id(class="form-control", id="dataset_id") }}
+                            {% for error in form.dataset_id.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                            {% if form.dataset_id.choices|length == 0 %}
+                            <div class="form-text text-warning">
+                                <i class="fas fa-exclamation-triangle me-1"></i> No datasets available. <a href="{{ url_for('upload_dataset') }}">Upload a dataset</a> first.
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Model Variant</label>
+                            {{ form.model_variant(type="hidden", id="model_variant") }}
+                            <div class="row g-3">
+                                {% if model_type == 'yolo' %}
+                                    {% for variant, info in config_data.items() %}
+                                    <div class="col-md-4">
+                                        <div class="card variant-selector h-100 {% if loop.first %}border-primary{% endif %}" 
+                                             data-variant="{{ variant }}" 
+                                             data-defaults="{{ info|tojson }}">
+                                            <div class="card-body">
+                                                <h5 class="card-title">{{ variant }}</h5>
+                                                <div class="small text-muted mb-3">{{ info.description }}</div>
+                                                <ul class="list-unstyled small">
+                                                    <li><i class="fas fa-clock me-1"></i> Default epochs: {{ info.default_epochs }}</li>
+                                                    <li><i class="fas fa-layer-group me-1"></i> Batch size: {{ info.default_batch_size }}</li>
+                                                    <li><i class="fas fa-image me-1"></i> Image size: {{ info.default_img_size }}</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    {% for variant, info in config_data.items() %}
+                                    <div class="col-md-6">
+                                        <div class="card variant-selector h-100 {% if loop.first %}border-primary{% endif %}" 
+                                             data-variant="{{ variant }}" 
+                                             data-defaults="{{ info|tojson }}">
+                                            <div class="card-body">
+                                                <h5 class="card-title">{{ variant }}</h5>
+                                                <div class="small text-muted mb-3">{{ info.description }}</div>
+                                                <ul class="list-unstyled small">
+                                                    <li><i class="fas fa-clock me-1"></i> Default epochs: {{ info.default_epochs }}</li>
+                                                    <li><i class="fas fa-layer-group me-1"></i> Batch size: {{ info.default_batch_size }}</li>
+                                                    <li><i class="fas fa-image me-1"></i> Image size: {{ info.default_img_size }}</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            {% for error in form.model_variant.errors %}
+                            <div class="invalid-feedback d-block mt-2">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="epochs" class="form-label">Epochs</label>
+                                    <div class="input-group">
+                                        {{ form.epochs(class="form-control", id="epochs") }}
+                                        <span class="input-group-text"><i class="fas fa-clock"></i></span>
+                                    </div>
+                                    {% for error in form.epochs.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="batch_size" class="form-label">Batch Size</label>
+                                    <div class="input-group">
+                                        {{ form.batch_size(class="form-control", id="batch_size") }}
+                                        <span class="input-group-text"><i class="fas fa-layer-group"></i></span>
+                                    </div>
+                                    {% for error in form.batch_size.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="img_size" class="form-label">Image Size</label>
+                                    <div class="input-group">
+                                        {{ form.img_size(class="form-control", id="img_size") }}
+                                        <span class="input-group-text"><i class="fas fa-image"></i></span>
+                                    </div>
+                                    {% for error in form.img_size.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="learning_rate" class="form-label">Learning Rate</label>
+                                    <div class="input-group">
+                                        {{ form.learning_rate(class="form-control", id="learning_rate") }}
+                                        <span class="input-group-text"><i class="fas fa-chart-line"></i></span>
+                                    </div>
+                                    {% for error in form.learning_rate.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="form-check">
+                                {{ form.pretrained(class="form-check-input", id="pretrained") }}
+                                <label class="form-check-label" for="pretrained">
+                                    Use Pretrained Weights
+                                </label>
+                                <div class="form-text">Starting with pretrained weights generally leads to faster convergence.</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-1"></i> Cancel
+                            </a>
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Training Information -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Training Information</h5>
+                </div>
+                <div class="card-body">
+                    <h6>About {{ 'YOLO' if model_type == 'yolo' else 'RF-DETR' }} Models:</h6>
+                    {% if model_type == 'yolo' %}
+                    <p>
+                        YOLO (You Only Look Once) is a state-of-the-art real-time object detection system. 
+                        It's known for its speed and accuracy, making it ideal for applications that require 
+                        real-time processing.
+                    </p>
+                    <ul>
+                        <li><strong>YOLOv5</strong> variants (small, medium, large) offer different trade-offs between speed and accuracy.</li>
+                        <li><strong>YOLOv8</strong> is the latest version with improved detection performance and additional features.</li>
+                    </ul>
+                    {% else %}
+                    <p>
+                        RF-DETR (Receptive Field DETR) is an improved version of the DETR (DEtection TRansformer) architecture,
+                        using a more efficient receptive field attention mechanism instead of the original cross-attention.
+                    </p>
+                    <ul>
+                        <li><strong>R50</strong> variant uses ResNet-50 as the backbone for feature extraction.</li>
+                        <li><strong>R101</strong> variant uses ResNet-101 for more powerful but slower feature extraction.</li>
+                    </ul>
+                    {% endif %}
+
+                    <h6 class="mt-3">Training Process:</h6>
+                    <ol>
+                        <li>The selected dataset will be prepared with the appropriate format</li>
+                        <li>The model will be initialized with pretrained weights (if selected)</li>
+                        <li>Training will run for the specified number of epochs</li>
+                        <li>MLFlow will track metrics during training</li>
+                        <li>Final model and metrics will be saved and available for download</li>
+                    </ol>
+
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Training Time:</strong> Depending on the model size and dataset, training may take from several minutes to several hours.
+                        You can monitor progress and stop training at any time.
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- Model Type Selection -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Select Model Type</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card selectable-card h-100 model-type-selector" data-model-type="yolo">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-bolt feature-icon text-warning"></i>
+                                    <h3>YOLO</h3>
+                                    <p class="card-text">
+                                        You Only Look Once - Fast and accurate object detection models.
+                                        Ideal for real-time applications and resource-constrained environments.
+                                    </p>
+                                    <div class="mt-3">
+                                        <span class="badge bg-light text-dark me-2">YOLOv5</span>
+                                        <span class="badge bg-light text-dark me-2">YOLOv8</span>
+                                        <span class="badge bg-light text-dark">Real-time</span>
+                                    </div>
+                                </div>
+                                <div class="card-footer text-center">
+                                    <button class="btn btn-outline-primary">Configure YOLO</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card selectable-card h-100 model-type-selector" data-model-type="rf-detr">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-project-diagram feature-icon text-info"></i>
+                                    <h3>RF-DETR</h3>
+                                    <p class="card-text">
+                                        Receptive Field DETR - Transformer-based detection with receptive field attention.
+                                        Higher accuracy at the cost of computational resources.
+                                    </p>
+                                    <div class="mt-3">
+                                        <span class="badge bg-light text-dark me-2">ResNet50</span>
+                                        <span class="badge bg-light text-dark me-2">ResNet101</span>
+                                        <span class="badge bg-light text-dark">Transformer</span>
+                                    </div>
+                                </div>
+                                <div class="card-footer text-center">
+                                    <button class="btn btn-outline-primary">Configure RF-DETR</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/configure.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,254 @@
+{% extends "layout.html" %}
+
+{% block title %}Dataset: {{ dataset.name }} - ML Training Pipeline{% endblock %}
+
+{% block head %}
+<style>
+    .class-badge {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    
+    .stats-chart-container {
+        height: 200px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb custom-breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('list_datasets') }}">Datasets</a></li>
+                <li class="breadcrumb-item active" aria-current="page">{{ dataset.name }}</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-database me-2"></i>{{ dataset.name }}</h2>
+            <span class="badge bg-primary fs-6">{{ dataset.format_type.upper() }}</span>
+        </div>
+        
+        <div class="row mb-4">
+            <!-- Dataset Information Card -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Dataset Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <p class="form-control-plaintext">
+                                {% if dataset.description %}
+                                    {{ dataset.description }}
+                                {% else %}
+                                    <span class="text-muted"><em>No description provided</em></span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Image Count</label>
+                                <p class="form-control-plaintext">{{ dataset.image_count }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Format Type</label>
+                                <p class="form-control-plaintext">{{ dataset.format_type.upper() }}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Created</label>
+                                <p class="form-control-plaintext">{{ dataset.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Owner</label>
+                                <p class="form-control-plaintext">{{ dataset.owner.username }}</p>
+                            </div>
+                        </div>
+                        
+                        <label class="form-label">Classes</label>
+                        <div>
+                            {% for class_name in dataset.get_class_names() %}
+                            <span class="badge bg-secondary class-badge">{{ class_name }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('list_datasets') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-1"></i> Back to Datasets
+                            </a>
+                            <a href="{{ url_for('configure_training', model_type='yolo', dataset_id=dataset.id) }}" class="btn btn-primary">
+                                <i class="fas fa-cogs me-1"></i> Train Models
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dataset Statistics Card -->
+            <div class="col-md-6">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">Dataset Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="stats-chart-container mb-3">
+                            <canvas id="classDistributionChart"></canvas>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Class</th>
+                                        <th>Count</th>
+                                        <th>Percentage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if stats.class_distribution %}
+                                        {% set total = stats.class_distribution.values()|sum %}
+                                        {% for class_name, count in stats.class_distribution.items() %}
+                                        <tr>
+                                            <td>{{ class_name }}</td>
+                                            <td>{{ count }}</td>
+                                            <td>{{ "%.1f"|format(count / total * 100) }}%</td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="3" class="text-center text-muted">No class distribution data available</td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Training Jobs Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Training Jobs Using This Dataset</h5>
+            </div>
+            <div class="card-body">
+                {% if jobs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Job Name</th>
+                                    <th>Model Type</th>
+                                    <th>Started</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job in jobs %}
+                                <tr>
+                                    <td>{{ job.job_name }}</td>
+                                    <td>{{ job.model_type.upper() }} ({{ job.model_variant }})</td>
+                                    <td>{{ job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else 'Pending' }}</td>
+                                    <td>
+                                        <span class="badge {% if job.status == 'completed' %}bg-success{% elif job.status == 'failed' %}bg-danger{% elif job.status == 'running' %}bg-primary{% elif job.status == 'cancelled' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ job.status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if job.status == 'running' or job.status == 'pending' %}
+                                        <a href="{{ url_for('monitor_training', job_id=job.id) }}" class="btn btn-sm btn-outline-primary">
+                                            Monitor
+                                        </a>
+                                        {% elif job.status == 'completed' %}
+                                        <a href="{{ url_for('training_results', job_id=job.id) }}" class="btn btn-sm btn-outline-success">
+                                            Results
+                                        </a>
+                                        {% else %}
+                                        <a href="{{ url_for('monitor_training', job_id=job.id) }}" class="btn btn-sm btn-outline-secondary">
+                                            Details
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <p class="text-muted">No training jobs have been created with this dataset yet.</p>
+                        <a href="{{ url_for('configure_training', model_type='yolo', dataset_id=dataset.id) }}" class="btn btn-primary">
+                            <i class="fas fa-cogs me-1"></i> Start Training
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Create class distribution chart
+        const ctx = document.getElementById('classDistributionChart').getContext('2d');
+        
+        {% if stats.class_distribution %}
+            const classLabels = [{% for class_name in stats.class_distribution.keys() %}'{{ class_name }}',{% endfor %}];
+            const classCounts = [{% for count in stats.class_distribution.values() %}{{ count }},{% endfor %}];
+            
+            // Generate colors for each class
+            const colors = [];
+            for(let i = 0; i < classLabels.length; i++) {
+                const hue = (i * 137.5) % 360; // Generate evenly spaced hues
+                colors.push(`hsl(${hue}, 70%, 60%)`);
+            }
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: classLabels,
+                    datasets: [{
+                        label: 'Class Distribution',
+                        data: classCounts,
+                        backgroundColor: colors,
+                        borderColor: colors.map(c => c.replace('0.7', '1')),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        {% else %}
+            // No data available, show placeholder
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#6c757d';
+            ctx.fillText('No class distribution data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        {% endif %}
+    });
+</script>
+{% endblock %}

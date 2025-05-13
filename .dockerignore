@@ -1,0 +1,49 @@
+# File e directory da ignorare durante la build di Docker
+
+# Environment virtuale
+venv/
+env/
+ENV/
+
+# File di cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# File di log
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# File di ambiente
+.env
+.env.local
+
+# Directory di upload e dati
+uploads/*
+!uploads/.gitkeep
+instance/
+mlruns/
+
+# File di sistema
+.DS_Store
+.git
+.gitignore
+
+# Altri file che non servono nei container
+README.md
+*.md
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+
+# File temporanei
+*.tmp
+*.swp
+*.swo

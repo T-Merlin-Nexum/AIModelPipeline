@@ -1,0 +1,14 @@
+uploads/
+__pycache__
+.venv
+*pyc
+.env
+*_NEW
+models/
+pretrained/
+training_jobs/
+ml_pipeline.db
+*.pt
+test_images/
+attached_assets/
+instance/

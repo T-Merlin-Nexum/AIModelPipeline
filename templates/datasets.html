@@ -1,0 +1,166 @@
+{% extends "layout.html" %}
+
+{% block title %}My Datasets - ML Training Pipeline{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-database me-2"></i>My Datasets</h2>
+            <a href="{{ url_for('upload_dataset') }}" class="btn btn-primary">
+                <i class="fas fa-upload me-1"></i> Upload New Dataset
+            </a>
+        </div>
+
+        {% if datasets %}
+            <form method="POST" action="{{ url_for('delete_datasets') }}">
+            <div class="mb-3">
+                <button type="button" class="btn btn-danger" id="delete-selected-datasets" disabled>
+                    <i class="fas fa-trash me-1"></i> Delete Selected
+                </button>
+            </div>
+            <div class="row">
+                {% for dataset in datasets %}
+                <div class="col-md-6 mb-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <input type="checkbox" class="dataset-checkbox me-2" name="dataset_ids" value="{{ dataset.id }}">
+                                {{ dataset.name }}
+                            </h5>
+                            <span class="badge bg-primary">{{ dataset.format_type.upper() }}</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <p class="mb-1">
+                                    {% if dataset.description %}
+                                        {{ dataset.description }}
+                                    {% else %}
+                                        <span class="text-muted"><em>No description provided</em></span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-image me-2 text-primary"></i>
+                                        <div>
+                                            <div class="small text-muted">Images</div>
+                                            <div>{{ dataset.image_count }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="d-flex align-items-center">
+                                        <i class="fas fa-tags me-2 text-success"></i>
+                                        <div>
+                                            <div class="small text-muted">Classes</div>
+                                            <div>{{ dataset.get_class_names()|length }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="small text-muted">
+                                <i class="fas fa-calendar me-1"></i> Created: {{ dataset.created_at.strftime('%Y-%m-%d') }}
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <div class="d-flex justify-content-between">
+                                <a href="{{ url_for('view_dataset', dataset_id=dataset.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-info-circle me-1"></i> Details
+                                </a>
+                                <a href="{{ url_for('configure_training', model_type='yolo', dataset_id=dataset.id) }}" class="btn btn-outline-success">
+                                    <i class="fas fa-cogs me-1"></i> Train
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            </form>
+        {% else %}
+            <div class="card text-center p-5">
+                <div class="mb-4">
+                    <i class="fas fa-database" style="font-size: 3rem; color: var(--bs-gray-500);"></i>
+                </div>
+                <h3>No datasets yet</h3>
+                <p class="text-muted">You haven't uploaded any datasets yet. Get started by uploading your first dataset.</p>
+                <div class="mt-3">
+                    <a href="{{ url_for('upload_dataset') }}" class="btn btn-primary">
+                        <i class="fas fa-upload me-1"></i> Upload New Dataset
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const deleteButton = document.getElementById('delete-selected-datasets');
+        const checkboxes = document.querySelectorAll('.dataset-checkbox');
+
+        // Update delete button state based on checkbox selection
+        function updateDeleteButtonState() {
+            const checkedCount = document.querySelectorAll('.dataset-checkbox:checked').length;
+            deleteButton.disabled = checkedCount === 0;
+        }
+
+        // Add event listeners to checkboxes
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateDeleteButtonState);
+        });
+
+        // Handle delete button click
+        deleteButton.addEventListener('click', function() {
+            const selectedIds = Array.from(document.querySelectorAll('.dataset-checkbox:checked'))
+                .map(cb => parseInt(cb.value));
+
+            if (selectedIds.length === 0) return;
+
+            // Confirm deletion
+            if (!confirm(`Are you sure you want to delete ${selectedIds.length} dataset(s)? This action cannot be undone.`)) {
+                return;
+            }
+
+            // Show loading state
+            deleteButton.disabled = true;
+            deleteButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Deleting...';
+
+            // Send delete request
+            fetch('/api/datasets/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ dataset_ids: selectedIds })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.errors && data.errors.length > 0) {
+                    alert(`Some datasets could not be deleted:\n${data.errors.join('\n')}`);
+                }
+
+                if (data.deleted_count > 0) {
+                    // Reload page to reflect changes
+                    window.location.reload();
+                } else {
+                    // Reset button state
+                    deleteButton.disabled = false;
+                    deleteButton.innerHTML = '<i class="fas fa-trash me-1"></i> Delete Selected';
+                }
+            })
+            .catch(error => {
+                console.error('Error deleting datasets:', error);
+                alert('An error occurred while deleting datasets.');
+                deleteButton.disabled = false;
+                deleteButton.innerHTML = '<i class="fas fa-trash me-1"></i> Delete Selected';
+            });
+        });
+    });
+</script>
+{% endblock %}

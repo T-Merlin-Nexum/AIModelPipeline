@@ -1,0 +1,57 @@
+services:
+  # App principale
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      #- uploads:/app/uploads
+      - mlflow-data:/mlflow-artifacts
+    environment:
+      - FLASK_APP=main.py
+      - FLASK_ENV=development
+      - MLFLOW_TRACKING_URI=http://mlflow:5001
+      - DATABASE_URL=sqlite:///ml_pipeline.db
+      - OMP_NUM_THREADS=1
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+      - MLFLOW_ARTIFACT_ROOT=/mlflow-artifacts
+    depends_on:
+      - mlflow
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    shm_size: 2gb
+    networks:
+      - ml-network
+
+  # MLFlow per il tracciamento degli esperimenti
+  mlflow:
+    image: python:3.9-slim
+    ports:
+      - "5001:5001"
+    command: >
+      bash -c "pip install mlflow==2.8.0 && 
+      mkdir -p /mlflow-artifacts &&
+      chmod 777 /mlflow-artifacts &&
+      mlflow server --host 0.0.0.0 --port 5001 --backend-store-uri sqlite:///mlruns.db --default-artifact-root /mlflow-artifacts"
+    volumes:
+      - mlflow-data:/mlflow-artifacts
+      - mlflow-db:/mlruns
+    networks:
+      - ml-network
+
+volumes:
+  uploads:
+  mlflow-data:
+  mlflow-db:
+
+networks:
+  ml-network:
+    driver: bridge

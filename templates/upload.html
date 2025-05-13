@@ -1,0 +1,142 @@
+{% extends "layout.html" %}
+
+{% block title %}Upload Dataset - ML Training Pipeline{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb custom-breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('list_datasets') }}">Datasets</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Upload</li>
+            </ol>
+        </nav>
+        
+        <h2 class="mb-4"><i class="fas fa-upload me-2"></i>Upload Dataset</h2>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Dataset Information</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data" id="upload-form">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        <label for="dataset_name" class="form-label">Dataset Name</label>
+                        {{ form.dataset_name(class="form-control", id="dataset_name", placeholder="Enter a name for your dataset") }}
+                        {% for error in form.dataset_name.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        {{ form.description(class="form-control", id="description", placeholder="Enter a description for your dataset (optional)", rows="3") }}
+                        {% for error in form.description.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label">Dataset Format</label>
+                        <div class="row g-3">
+                            {% set formats = [
+                                {'value': 'yolo', 'name': 'YOLO TXT', 'icon': 'fas fa-file-alt', 'desc': 'YOLO format with one txt file per image containing bounding boxes'},
+                                {'value': 'coco', 'name': 'COCO JSON', 'icon': 'fas fa-file-code', 'desc': 'Dataset with a JSON file containing annotations in COCO format'},
+                                {'value': 'voc', 'name': 'Pascal VOC XML', 'icon': 'fas fa-file-code', 'desc': 'Pascal VOC format with XML annotation files'}
+                            ] %}
+                            
+                            {% for format in formats %}
+                            <div class="col-md-4">
+                                <div class="card format-card h-100 {% if loop.first %}border-primary{% endif %}" data-format="{{ format.value }}">
+                                    <div class="card-body">
+                                        <div class="form-check">
+                                            <input type="radio" name="format_type" id="format_{{ format.value }}" value="{{ format.value }}" class="form-check-input format-radio" {% if loop.first %}checked{% endif %}>
+                                            <label class="form-check-label w-100" for="format_{{ format.value }}">
+                                                <h5 class="mb-1"><i class="{{ format.icon }} me-2"></i>{{ format.name }}</h5>
+                                            </label>
+                                        </div>
+                                        <p class="card-text small mt-2">{{ format.desc }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% for error in form.format_type.errors %}
+                        <div class="invalid-feedback d-block mt-2">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="dataset_zip" class="form-label">Dataset ZIP File</label>
+                        <div class="input-group">
+                            {{ form.dataset_zip(class="form-control", id="dataset_zip", accept=".zip") }}
+                        </div>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle me-1" data-bs-toggle="tooltip" title="Il file ZIP deve contenere le immagini e le relative annotazioni"></i> Upload a ZIP file containing your dataset (max 500MB)
+                        </div>
+                        {% for error in form.dataset_zip.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Progress bar (hidden initially) -->
+                    <div id="progress-container" class="mb-3">
+                        <label class="form-label">Upload Progress</label>
+                        <div class="progress">
+                            <div id="upload-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+                        </div>
+                        <small id="upload-status" class="form-text text-muted mt-1">Preparing upload...</small>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-secondary" id="cancel-upload">
+                            <i class="fas fa-times me-1"></i> Cancel
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="upload-btn">
+                            <i class="fas fa-upload me-1"></i> Upload Dataset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">Dataset Guidelines</h5>
+            </div>
+            <div class="card-body">
+                <h6>Supported Formats:</h6>
+                <ul>
+                    <li><strong>COCO JSON:</strong> A single JSON file containing all annotations in COCO format.</li>
+                    <li><strong>YOLO TXT:</strong> One txt file per image with normalized bounding box coordinates.</li>
+                    <li><strong>Pascal VOC XML:</strong> XML annotation files containing bounding box information.</li>
+                </ul>
+                
+                <h6>Dataset Structure:</h6>
+                <ul>
+                    <li>For COCO format: Include a JSON file with "images", "annotations" and "categories" fields.</li>
+                    <li>For YOLO format: Include "images" and "labels" folders with matching filenames.</li>
+                    <li>For VOC format: Include "JPEGImages" for images and "Annotations" for XML files.</li>
+                </ul>
+                
+                <h6>Supported Image Formats:</h6>
+                <ul>
+                    <li>JPG/JPEG, PNG, BMP</li>
+                </ul>
+                
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Tip:</strong> Ensure your dataset is well-organized before uploading for best results.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/upload.js') }}"></script>
+{% endblock %}

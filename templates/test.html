@@ -1,0 +1,142 @@
+
+{% extends "layout.html" %}
+
+{% block title %}Test Models - Object Detection{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb custom-breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Test Models</li>
+            </ol>
+        </nav>
+        
+        <h2 class="mb-4"><i class="fas fa-vial me-2"></i>Test Models</h2>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Upload Image & Select Model</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="test-form" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="test-image" class="form-label">Upload Image</label>
+                                <input type="file" class="form-control" id="test-image" name="image" accept=".jpg,.jpeg,.png">
+                                <div class="form-text">Select an image to test object detection.</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="model-select" class="form-label">Select Model</label>
+                                <select class="form-select" id="model-select" name="model_id">
+                                    <option value="">-- Select a model --</option>
+                                    
+                                    {% if models|selectattr('model_type', 'equalto', 'yolo')|list %}
+                                    <optgroup label="YOLO Models">
+                                        {% for model in models if model.model_type == 'yolo' %}
+                                        <option value="{{ model.id }}" data-model-type="{{ model.model_type }}">
+                                            {{ model.job_name }} ({{ model.model_variant }})
+                                        </option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    {% endif %}
+                                    
+                                    {% if models|selectattr('model_type', 'equalto', 'rf-detr')|list %}
+                                    <optgroup label="RF-DETR Models">
+                                        {% for model in models if model.model_type == 'rf-detr' %}
+                                        <option value="{{ model.id }}" data-model-type="{{ model.model_type }}">
+                                            {{ model.job_name }} ({{ model.model_variant }})
+                                        </option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    {% endif %}
+                                </select>
+                                <div class="form-text" id="model-info">
+                                    Select a trained model to perform object detection.
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="confidence-threshold" class="form-label">Confidence Threshold</label>
+                                <input type="range" class="form-range" id="confidence-threshold" name="threshold" 
+                                      min="0.1" max="0.9" step="0.05" value="0.25">
+                                <div class="d-flex justify-content-between">
+                                    <small>0.1</small>
+                                    <small id="threshold-value">0.25</small>
+                                    <small>0.9</small>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary" id="run-inference-btn">
+                                <i class="fas fa-play-circle me-2"></i>Run Inference
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Preview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="image-preview-container" class="text-center">
+                            <p class="text-muted">Upload an image to see preview</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card" id="results-card" style="display: none;">
+                    <div class="card-header">
+                        <h5 class="mb-0">Detection Results</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div id="results-image-container" class="text-center">
+                                    <img id="results-image" class="img-fluid" alt="Detection Results">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div id="detection-summary" class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0">Objects Detected</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div id="detection-list">
+                                            <!-- Detection results will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span>Inference Time:</span>
+                                        <span id="inference-time">-</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>Total Objects:</span>
+                                        <span id="total-objects">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/test.js') }}"></script>
+{% endblock %}

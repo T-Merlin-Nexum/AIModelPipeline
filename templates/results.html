@@ -1,0 +1,406 @@
+{% extends "layout.html" %}
+
+{% block title %}Training Results - ML Training Pipeline{% endblock %}
+
+{% block head %}
+<style>
+    .metrics-value {
+        font-size: 3rem;
+        font-weight: bold;
+    }
+    .metrics-label {
+        font-size: 1rem;
+        color: #aaa;
+    }
+    .metrics-card {
+        transition: all 0.3s ease;
+    }
+    .metrics-card:hover {
+        transform: translateY(-5px);
+    }
+    .download-btn {
+        transition: all 0.3s ease;
+    }
+    .download-btn:hover {
+        transform: scale(1.05);
+    }
+    .metrics-chart {
+        height: 280px;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb custom-breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Home</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('list_jobs') }}">Training Jobs</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Training Results</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-chart-bar me-2"></i>Training Results</h2>
+
+            {% if job.status == 'completed' and model_path %}
+            <a href="{{ url_for('download_artifact', artifact_id=artifacts[0].id if artifacts else 0) }}" class="btn btn-success download-btn">
+                <i class="fas fa-download me-1"></i> Download Model
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Job Information -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Job Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table">
+                            <tr>
+                                <th>Job Name:</th>
+                                <td>{{ job.job_name }}</td>
+                            </tr>
+                            <tr>
+                                <th>Model Type:</th>
+                                <td>{{ job.model_type|upper }}</td>
+                            </tr>
+                            <tr>
+                                <th>Model Variant:</th>
+                                <td>{{ job.model_variant }}</td>
+                            </tr>
+                            <tr>
+                                <th>Dataset:</th>
+                                <td>{{ dataset.name if dataset else 'N/A' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table">
+                            <tr>
+                                <th>Status:</th>
+                                <td>
+                                    {% if job.status == 'completed' %}
+                                    <span class="badge bg-success">Completed</span>
+                                    {% elif job.status == 'failed' %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ job.status|title }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Started:</th>
+                                <td>{{ job.started_at.strftime('%Y-%m-%d %H:%M:%S') if job.started_at else 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Completed:</th>
+                                <td>{{ job.completed_at.strftime('%Y-%m-%d %H:%M:%S') if job.completed_at else 'N/A' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Duration:</th>
+                                <td>
+                                    {% if job.started_at and job.completed_at %}
+                                    {{ (job.completed_at - job.started_at).total_seconds()|round(1) }} seconds
+                                    {% else %}
+                                    N/A
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+
+                {% if job.error_message %}
+                <div class="alert alert-danger mt-3">
+                    <strong>Error:</strong> {{ job.error_message }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Hyperparameters - Moved here from below -->
+        {% if job.status == 'completed' %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Hyperparameters</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for key, value in hyperparameters.items() %}
+                    <div class="col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">{{ key|title }}</h6>
+                                <p class="card-text">{{ value }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Training Metrics Overview -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metrics-card h-100">
+                    <div class="card-body text-center">
+                        <div class="metrics-value text-primary">{{ metrics.precision|round(2) if metrics and metrics.precision else 'N/A' }}</div>
+                        <div class="metrics-label">PRECISION</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metrics-card h-100">
+                    <div class="card-body text-center">
+                        <div class="metrics-value text-success">{{ metrics.recall|round(2) if metrics and metrics.recall else 'N/A' }}</div>
+                        <div class="metrics-label">RECALL</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metrics-card h-100">
+                    <div class="card-body text-center">
+                        <div class="metrics-value text-info">{{ metrics.mAP50|round(2) if metrics and metrics.mAP50 else 'N/A' }}</div>
+                        <div class="metrics-label">mAP50</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metrics-card h-100">
+                    <div class="card-body text-center">
+                        <div class="metrics-value text-warning">{{ metrics.get('mAP50-95', metrics.get('mAP50_95', 'N/A'))|round(2) if metrics and (metrics.get('mAP50-95') is not none or metrics.get('mAP50_95') is not none) else 'N/A' }}</div>
+                        <div class="metrics-label">mAP50-95</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Charts - Four separate charts (2 per row) -->
+        {% if metrics_history and job.status == 'completed' %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Training Metrics Over Time</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Precision</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="precisionChart" class="metrics-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Recall</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="recallChart" class="metrics-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Loss</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="lossChart" class="metrics-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">mAP50</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="mapChart" class="metrics-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const epochs = {{ metrics_history.epochs|safe }};
+                const chartConfig = {
+                    type: 'line',
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Epoch'
+                                }
+                            },
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                };
+
+                // Precision Chart
+                const precisionCtx = document.getElementById('precisionChart').getContext('2d');
+                new Chart(precisionCtx, {
+                    ...chartConfig,
+                    data: {
+                        labels: Array.from({length: epochs.length}, (_, i) => i + 1),
+                        datasets: [{
+                            label: 'Precision',
+                            data: {{ metrics_history.precision|safe }},
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    }
+                });
+
+                // Recall Chart
+                const recallCtx = document.getElementById('recallChart').getContext('2d');
+                new Chart(recallCtx, {
+                    ...chartConfig,
+                    data: {
+                        labels: Array.from({length: epochs.length}, (_, i) => i + 1),
+                        datasets: [{
+                            label: 'Recall',
+                            data: {{ metrics_history.recall|safe }},
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    }
+                });
+
+                // Loss Chart
+                const lossCtx = document.getElementById('lossChart').getContext('2d');
+                new Chart(lossCtx, {
+                    ...chartConfig,
+                    data: {
+                        labels: Array.from({length: epochs.length}, (_, i) => i + 1),
+                        datasets: [{
+                            label: 'Loss',
+                            data: {{ metrics_history.loss|safe }},
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    }
+                });
+
+                // mAP Chart
+                const mapCtx = document.getElementById('mapChart').getContext('2d');
+                new Chart(mapCtx, {
+                    ...chartConfig,
+                    data: {
+                        labels: Array.from({length: epochs.length}, (_, i) => i + 1),
+                        datasets: [{
+                            label: 'mAP50',
+                            data: {{ metrics_history.mAP50|safe if metrics_history.mAP50 else '[]' }},
+                            borderColor: 'rgba(153, 102, 255, 1)',
+                            backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    }
+                });
+            });
+        </script>
+        {% endif %}
+
+        <!-- Model Information -->
+        {% if model_path %}
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Model Download</h5>
+                        {% if job.mlflow_run_id and not job.mlflow_run_id.startswith('direct-') %}
+                        <button class="btn btn-sm btn-outline-primary" id="sync-mlflow-btn" 
+                                data-job-id="{{ job.id }}" data-toggle="tooltip" 
+                                title="Sincronizza metriche e artefatti con MLFlow">
+                            <i class="fas fa-sync"></i> Sync MLFlow
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        <table class="table">
+                            <tr>
+                                <th>Model File:</th>
+                                <td>
+                                    {% if model_path %}
+                                    {{ model_path.split('/')[-1] }}
+                                    {% else %}
+                                    Not available
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>File Size:</th>
+                                <td>
+                                    {% if model_path and model_size %}
+                                    {{ model_size }} MB
+                                    {% else %}
+                                    Unknown
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>MLFlow Run ID:</th>
+                                <td>{{ job.mlflow_run_id[:8] + '...' if job.mlflow_run_id else 'N/A' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                {% if job.status == 'completed' and model_path and artifacts %}
+                <div class="text-center p-4">
+                    <a href="{{ url_for('download_artifact', artifact_id=artifacts[0].id if artifacts else 0) }}" class="btn btn-lg btn-success download-btn">
+                        <i class="fas fa-download me-2"></i> Download Model
+                    </a>
+                    <p class="text-muted mt-2">
+                        Download the trained model weights for inference
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

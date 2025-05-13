@@ -1,0 +1,173 @@
+/* Custom CSS styles - minimal overrides for Bootstrap */
+
+/* Card hover effect for selectable cards */
+.selectable-card {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+}
+
+.selectable-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Format selection cards */
+.format-card {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    border-width: 2px;
+    position: relative;
+}
+
+.format-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.format-card.border-primary {
+    background-color: rgba(13, 110, 253, 0.05);
+    border-color: #0d6efd;
+    border-width: 3px;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.format-card .form-check {
+    margin-bottom: 0;
+}
+
+.format-card .form-check-input {
+    margin-top: 0.25rem;
+}
+
+.format-card .form-check-label {
+    cursor: pointer;
+    display: block;
+}
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.model-type-selector {
+    transition: all 0.2s ease-in-out;
+    border-width: 2px;
+}
+
+.model-type-selector:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.model-type-selector.border-primary,
+.variant-selector.border-primary {
+    background-color: rgba(13, 110, 253, 0.05);
+    border-color: #0d6efd;
+    border-width: 2px;
+}
+
+.selected-card {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Custom class for adding vertical space */
+.spacer-y {
+    height: 2rem;
+}
+
+/* Custom scrollable container for log output */
+.log-container {
+    max-height: 300px;
+    overflow-y: auto;
+    background-color: #1e1e1e;
+    color: #f8f8f8;
+    font-family: monospace;
+    padding: 1rem;
+    border-radius: 0.25rem;
+}
+
+/* Status badges */
+.status-badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Job card decorations based on status */
+.job-card {
+    border-left-width: 4px;
+}
+
+.job-card.status-pending {
+    border-left-color: var(--bs-secondary);
+}
+
+.job-card.status-running {
+    border-left-color: var(--bs-primary);
+}
+
+.job-card.status-completed {
+    border-left-color: var(--bs-success);
+}
+
+.job-card.status-failed {
+    border-left-color: var(--bs-danger);
+}
+
+.job-card.status-cancelled {
+    border-left-color: var(--bs-warning);
+}
+
+/* Dataset statistics chart container */
+.stats-chart-container {
+    height: 200px;
+}
+
+/* Metrics chart container in monitoring page */
+.metrics-chart-container {
+    height: 350px;
+}
+
+/* Custom breadcrumbs style */
+.custom-breadcrumb {
+    background-color: transparent;
+    padding: 0.5rem 0;
+}
+
+/* Fix for monospace font in log output */
+.log-output {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+/* Feature icon */
+.feature-icon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+/* Auth form styles */
+.auth-form {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* Form help text */
+.form-text {
+    font-size: 0.875rem;
+}
+
+/* Custom table styles for dataset items */
+.table-dataset {
+    font-size: 0.9rem;
+}
+
+.table-dataset th {
+    font-weight: 600;
+}
+
+/* Custom progress bar for training */
+.progress-bar-animated {
+    animation-duration: 1.5s;
+}

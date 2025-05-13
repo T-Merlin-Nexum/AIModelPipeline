@@ -1,0 +1,161 @@
+{% extends "layout.html" %}
+
+{% block title %}ML Training Pipeline{% endblock %}
+
+{% block content %}
+    <!-- Dashboard for users -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card bg-dark">
+                <div class="card-body">
+                    <h2 class="card-title">Welcome to ML Training Pipeline!</h2>
+                    <p class="card-text">
+                        Use this platform to fine-tune and retrain YOLO and RF-DETR models with your custom datasets.
+                        Track experiments with MLFlow.
+                    </p>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('upload_dataset') }}" class="btn btn-primary">
+                            <i class="fas fa-upload me-1"></i> Upload Dataset
+                        </a>
+                        <a href="{{ url_for('configure_training') }}" class="btn btn-secondary">
+                            <i class="fas fa-cogs me-1"></i> Configure Training
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Stats Row -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-database feature-icon text-primary"></i>
+                    <h5 class="card-title">Your Datasets</h5>
+                    <h2 class="card-text">{{ recent_datasets|length }}</h2>
+                    <a href="{{ url_for('list_datasets') }}" class="btn btn-sm btn-outline-secondary">View All</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-tasks feature-icon text-success"></i>
+                    <h5 class="card-title">Training Jobs</h5>
+                    <h2 class="card-text">{{ recent_jobs|length }}</h2>
+                    <a href="{{ url_for('list_jobs') }}" class="btn btn-sm btn-outline-secondary">View All</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-running feature-icon text-warning"></i>
+                    <h5 class="card-title">Active Jobs</h5>
+                    <h2 class="card-text">{{ active_jobs|length }}</h2>
+                    {% if active_jobs %}
+                    <a href="{{ url_for('monitor_training', job_id=active_jobs[0].id) }}" class="btn btn-sm btn-outline-warning">Monitor</a>
+                    {% else %}
+                    <button class="btn btn-sm btn-outline-secondary" disabled>No Active Jobs</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-database me-2"></i>Recent Datasets</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if recent_datasets %}
+                    <ul class="list-group list-group-flush">
+                        {% for dataset in recent_datasets %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0">{{ dataset.name }}</h6>
+                                <small class="text-muted">{{ dataset.format_type.upper() }} | {{ dataset.image_count }} images</small>
+                            </div>
+                            <a href="{{ url_for('view_dataset', dataset_id=dataset.id) }}" class="btn btn-sm btn-outline-primary">
+                                View
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center p-4">
+                        <p class="mb-0">No datasets yet. Get started by uploading one!</p>
+                        <a href="{{ url_for('upload_dataset') }}" class="btn btn-primary mt-2">
+                            <i class="fas fa-upload me-1"></i> Upload Dataset
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if recent_datasets %}
+                <div class="card-footer text-center">
+                    <a href="{{ url_for('list_datasets') }}" class="btn btn-sm btn-outline-primary">View All Datasets</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Recent Training Jobs</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if recent_jobs %}
+                    <ul class="list-group list-group-flush">
+                        {% for job in recent_jobs %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-0">{{ job.job_name }}</h6>
+                                <small class="text-muted">
+                                    {{ job.model_type.upper() }} {{ job.model_variant }} | 
+                                    <span class="badge bg-{% if job.status == 'completed' %}success{% elif job.status == 'failed' %}danger{% elif job.status == 'running' %}primary{% else %}secondary{% endif %}">
+                                        {{ job.status }}
+                                    </span>
+                                </small>
+                            </div>
+                            <div>
+                                {% if job.status == 'running' or job.status == 'pending' %}
+                                <a href="{{ url_for('monitor_training', job_id=job.id) }}" class="btn btn-sm btn-outline-primary">
+                                    Monitor
+                                </a>
+                                {% elif job.status == 'completed' %}
+                                <a href="{{ url_for('training_results', job_id=job.id) }}" class="btn btn-sm btn-outline-success">
+                                    Results
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('monitor_training', job_id=job.id) }}" class="btn btn-sm btn-outline-secondary">
+                                    Details
+                                </a>
+                                {% endif %}
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center p-4">
+                        <p class="mb-0">No training jobs yet. Configure a model to start training!</p>
+                        <a href="{{ url_for('configure_training') }}" class="btn btn-primary mt-2">
+                            <i class="fas fa-cogs me-1"></i> Configure Training
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if recent_jobs %}
+                <div class="card-footer text-center">
+                    <a href="{{ url_for('list_jobs') }}" class="btn btn-sm btn-outline-primary">View All Jobs</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
