@@ -1314,13 +1314,6 @@ class DirectTrainingPipeline:
                         "mAP50-95": []
                     }
 
-                    # Funzione per calcolare la loss
-                    def compute_loss(model_output, targets):
-                        # Semplice loss function per dimostrazione
-                        # In una implementazione reale, si utilizzerebbe la loss function di RF-DETR
-                        loss = torch.tensor(0.0, requires_grad=True)
-                        return loss
-
                     # Funzione per calcolare le metriche
                     def compute_metrics(model, validation_loader):
                         model.eval()
@@ -1427,9 +1420,6 @@ class DirectTrainingPipeline:
                         # Calcola loss media per questa epoca
                         avg_train_loss = total_loss / max(1, batch_count)
                         metrics_history["train_loss"].append(avg_train_loss)
-
-                        # Aggiorna lo scheduler
-                        lr_scheduler.step()
 
                         # Validation
                         precision, recall, mAP50, mAP50_95 = compute_metrics(model, val_loader)
