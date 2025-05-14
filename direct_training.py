@@ -3,6 +3,8 @@ import os
 import threading
 import uuid
 
+import yaml
+
 from rfdetr_training import train_rfdetr_model, download_pretrained_weights as download_rfdetr_weights
 from yolo_training import train_yolo_model, download_pretrained_weights as download_yolo_weights
 
@@ -73,7 +75,6 @@ class DirectTrainingPipeline:
                 if dataset.format_type == 'yolo':
                     yaml_path = os.path.join(dataset_path, 'data.yaml')
                     # Se esiste già, aggiorniamo solo il path assoluto
-                    import yaml
                     if os.path.exists(yaml_path):
                         logger.info(
                             f"Aggiornamento percorso in data.yaml esistente: {yaml_path}"

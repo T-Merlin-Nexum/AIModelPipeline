@@ -3,14 +3,14 @@ import glob
 import json
 import logging
 import os
-import subprocess
-import sys
 
 import cv2
 import numpy as np
 import requests
 import torch
 from PIL import Image
+from rfdetr import RFDETRBase, RFDETRLarge
+from rfdetr.util.coco_classes import COCO_CLASSES
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from tqdm import tqdm
@@ -457,17 +457,6 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
         logger.warning(f"MLFlow logging disabled: {str(e)}")
 
     try:
-        # Install rfdetr package if not available
-        try:
-            from rfdetr import RFDETRBase, RFDETRLarge
-            from rfdetr.util.coco_classes import COCO_CLASSES
-            logger.info("RF-DETR package already installed")
-        except ImportError:
-            logger.info("Installing RF-DETR package...")
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "rfdetr"])
-            from rfdetr import RFDETRBase, RFDETRLarge
-            from rfdetr.util.coco_classes import COCO_CLASSES
-
         # Get training parameters
         total_epochs = int(hyperparameters.get('epochs', 50))
         batch_size = int(hyperparameters.get('batch_size', 8))

@@ -16,16 +16,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copia i file di configurazione delle dipendenze
 COPY pyproject.toml uv.lock ./
 
-# Installa le dipendenze Python
-RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir . && \
-    pip install --no-cache-dir gunicorn && \
-    pip install --no-cache-dir ultralytics && \
-    pip install PyYAML && \
-    pip install mlflow --upgrade
-
 # Copia il codice dell'applicazione
 COPY . .
+
+# Installa le dipendenze Python
+RUN pip install --no-cache-dir -U pip && \
+    pip install --no-cache-dir -r requirements.txt --upgrade
 
 # Crea la directory per gli upload e tmp se non esistono
 #RUN mkdir -p uploads
