@@ -10,6 +10,7 @@ services:
       - .:/app
       #- uploads:/app/uploads
       - mlflow-data:/mlflow-artifacts
+      - uploads:/app/uploads
     environment:
       - FLASK_APP=main.py
       - FLASK_ENV=development
