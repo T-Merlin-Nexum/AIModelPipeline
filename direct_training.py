@@ -103,9 +103,9 @@ class DirectTrainingPipeline:
                         yaml_config = {
                             "path": dataset_path,
                             "train":
-                                "train" if os.path.exists(train_dir) else "",
+                            "train" if os.path.exists(train_dir) else "",
                             "val":
-                                "valid" if os.path.exists(valid_dir) else "",
+                            "valid" if os.path.exists(valid_dir) else "",
                             "test": "test" if os.path.exists(test_dir) else "",
                             "names": {
                                 0: "class0",
@@ -145,10 +145,11 @@ class DirectTrainingPipeline:
             return download_yolo_weights(model_variant)
         elif 'rf_detr' in model_variant:
             # RF-DETR models are already pretrained, just get model info
-            from rfdetr_training import get_pretrained_model_info
             return get_pretrained_model_info(model_variant)
         else:
-            logger.warning(f"Unknown model variant: {model_variant}, cannot determine weights")
+            logger.warning(
+                f"Unknown model variant: {model_variant}, cannot determine weights"
+            )
             return None
 
     def train_model(self, dataset_info, model_variant, hyperparameters,
@@ -169,21 +170,13 @@ class DirectTrainingPipeline:
 
         # Delegate to the appropriate training function based on model type
         if 'yolo' in model_variant:
-            return train_yolo_model(
-                dataset_info,
-                model_variant,
-                hyperparameters,
-                mlflow_run_id,
-                mlflow_tracking_uri
-            )
+            return train_yolo_model(dataset_info, model_variant,
+                                    hyperparameters, mlflow_run_id,
+                                    mlflow_tracking_uri)
         elif 'rf_detr' in model_variant:
-            return train_rfdetr_model(
-                dataset_info,
-                model_variant,
-                hyperparameters,
-                mlflow_run_id,
-                mlflow_tracking_uri
-            )
+            return train_rfdetr_model(dataset_info, model_variant,
+                                      hyperparameters, mlflow_run_id,
+                                      mlflow_tracking_uri)
         else:
             logger.error(f"Unsupported model variant: {model_variant}")
             return {
@@ -317,7 +310,10 @@ def submit_direct_pipeline(config):
     return run_id
 
 
-def train_rf_detr(dataset_path, output_path, hyperparameters, dataset_format='yolo'):
+def train_rf_detr(dataset_path,
+                  output_path,
+                  hyperparameters,
+                  dataset_format='yolo'):
     """
     Train the RF-DETR object detection model
 
@@ -330,7 +326,9 @@ def train_rf_detr(dataset_path, output_path, hyperparameters, dataset_format='yo
     Returns:
         Dictionary with training results
     """
-    logger.info(f"Training RF-DETR with dataset {dataset_path}, format {dataset_format}")
+    logger.info(
+        f"Training RF-DETR with dataset {dataset_path}, format {dataset_format}"
+    )
     logger.info(f"Hyperparameters: {hyperparameters}")
 
     # Start RF-DETR training
@@ -341,10 +339,14 @@ def train_rf_detr(dataset_path, output_path, hyperparameters, dataset_format='yo
 
     # Check if dataset format is supported (YOLO or COCO)
     if dataset_format.lower() not in ['yolo', 'coco']:
-        logger.warning(f"RF-DETR currently only supports YOLO and COCO formats, but got {dataset_format}")
+        logger.warning(
+            f"RF-DETR currently only supports YOLO and COCO formats, but got {dataset_format}"
+        )
         return {
-            'success': False,
-            'error': f"RF-DETR currently only supports YOLO and COCO formats, but got {dataset_format}"
+            'success':
+            False,
+            'error':
+            f"RF-DETR currently only supports YOLO and COCO formats, but got {dataset_format}"
         }
 
     # Construct dataset paths based on format
@@ -357,14 +359,17 @@ def train_rf_detr(dataset_path, output_path, hyperparameters, dataset_format='yo
         train_data_path = os.path.join(dataset_path, 'train')
         val_data_path = os.path.join(dataset_path, 'val')
         # Verifica i file di annotazione COCO
-        train_annotations = os.path.join(train_data_path, '_annotations.coco.json')
+        train_annotations = os.path.join(train_data_path,
+                                         '_annotations.coco.json')
         val_annotations = os.path.join(val_data_path, '_annotations.coco.json')
 
         if not os.path.exists(train_annotations):
-            logger.error(f"COCO annotations file not found: {train_annotations}")
+            logger.error(
+                f"COCO annotations file not found: {train_annotations}")
             return {
                 'success': False,
-                'error': f"COCO annotations file not found: {train_annotations}"
+                'error':
+                f"COCO annotations file not found: {train_annotations}"
             }
 
     # Check if dataset exists
