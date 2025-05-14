@@ -32,10 +32,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Check file size
             const fileSize = this.files[0].size;
-            const maxSize = 500 * 1024 * 1024; // 500 MB
+            const maxSize = 510 * 1024 * 1024; // 500 MB with a small buffer
             
             if (fileSize > maxSize) {
-                alert('File is too large! Maximum size is 500 MB.');
+                alert(`File is too large! Maximum size is 500 MB. Your file is ${(fileSize / (1024 * 1024)).toFixed(2)} MB.`);
                 this.value = ''; // Clear file input
                 if (fileLabel) {
                     fileLabel.textContent = 'Choose dataset ZIP file...';
