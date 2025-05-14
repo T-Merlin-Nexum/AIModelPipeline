@@ -67,7 +67,7 @@ class DirectTrainingPipeline:
                     else:
                         # Fallback to example dataset
                         return {
-                            "dataset_path": f"coco8",
+                            "dataset_path": "coco8",
                             "format_type": "yolo"
                         }
 
@@ -102,10 +102,8 @@ class DirectTrainingPipeline:
 
                         yaml_config = {
                             "path": dataset_path,
-                            "train":
-                            "train" if os.path.exists(train_dir) else "",
-                            "val":
-                            "valid" if os.path.exists(valid_dir) else "",
+                            "train": "train" if os.path.exists(train_dir) else "",
+                            "val": "valid" if os.path.exists(valid_dir) else "",
                             "test": "test" if os.path.exists(test_dir) else "",
                             "names": {
                                 0: "class0",
@@ -308,74 +306,3 @@ def submit_direct_pipeline(config):
 
     logger.info(f"Submitted direct training pipeline with run ID: {run_id}")
     return run_id
-
-
-def train_rf_detr(dataset_path,
-                  output_path,
-                  hyperparameters,
-                  dataset_format='yolo'):
-    """
-    Train the RF-DETR object detection model
-
-    Args:
-        dataset_path: Path to the dataset
-        output_path: Path to save the output model
-        hyperparameters: Training hyperparameters
-        dataset_format: Format of the dataset (yolo or coco)
-
-    Returns:
-        Dictionary with training results
-    """
-    logger.info(
-        f"Training RF-DETR with dataset {dataset_path}, format {dataset_format}"
-    )
-    logger.info(f"Hyperparameters: {hyperparameters}")
-
-    # Start RF-DETR training
-    batch_size = hyperparameters.get('batch_size', 16)
-    num_epochs = int(hyperparameters.get('epochs', 10))
-    learning_rate = float(hyperparameters.get('learning_rate', 2e-4))
-    model_type = hyperparameters.get('model_variant', 'base').lower()
-
-    # Check if dataset format is supported (YOLO or COCO)
-    if dataset_format.lower() not in ['yolo', 'coco']:
-        logger.warning(
-            f"RF-DETR currently only supports YOLO and COCO formats, but got {dataset_format}"
-        )
-        return {
-            'success':
-            False,
-            'error':
-            f"RF-DETR currently only supports YOLO and COCO formats, but got {dataset_format}"
-        }
-
-    # Construct dataset paths based on format
-    if dataset_format.lower() == 'yolo':
-        train_data_path = os.path.join(dataset_path, 'train')
-        val_data_path = os.path.join(dataset_path, 'valid')
-        if not os.path.exists(val_data_path):
-            val_data_path = os.path.join(dataset_path, 'val')
-    elif dataset_format.lower() == 'coco':
-        train_data_path = os.path.join(dataset_path, 'train')
-        val_data_path = os.path.join(dataset_path, 'val')
-        # Verifica i file di annotazione COCO
-        train_annotations = os.path.join(train_data_path,
-                                         '_annotations.coco.json')
-        val_annotations = os.path.join(val_data_path, '_annotations.coco.json')
-
-        if not os.path.exists(train_annotations):
-            logger.error(
-                f"COCO annotations file not found: {train_annotations}")
-            return {
-                'success': False,
-                'error':
-                f"COCO annotations file not found: {train_annotations}"
-            }
-
-    # Check if dataset exists
-    if not os.path.exists(train_data_path):
-        logger.error(f"Training data path not found: {train_data_path}")
-        return {
-            'success': False,
-            'error': f"Training data path not found: {train_data_path}"
-        }

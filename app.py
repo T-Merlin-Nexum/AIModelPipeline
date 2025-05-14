@@ -1,17 +1,17 @@
-import os
 import logging
+import os
 
 from flask import Flask
+from flask_login import LoginManager
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
-from flask_login import LoginManager
-from flask_wtf.csrf import CSRFProtect
-
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
 
 class Base(DeclarativeBase):
     pass
@@ -60,23 +60,27 @@ login_manager.login_view = 'login'
 with app.app_context():
     # Import models
     import models  # noqa: F401
-    
+
     # Create tables
     db.create_all()
-    
+
     # Import and register blueprints/routes
     from routes import register_routes
+
     register_routes(app)
-    
+
     # Import authentication routes
     from auth import auth_bp
+
     app.register_blueprint(auth_bp)
 
     # Set up login loader
     from models import User
-    
+
+
     @login_manager.user_loader
     def load_user(user_id):
         return db.session.get(User, int(user_id))
+
 
     logger.info("Flask application configured and started")
