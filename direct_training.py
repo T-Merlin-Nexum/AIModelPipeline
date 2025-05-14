@@ -1,19 +1,14 @@
-import os
-import sys
 import logging
-import time
-import json
+import os
 import threading
-import random
-from datetime import datetime
+import uuid
+
+from rfdetr_training import train_rfdetr_model, download_pretrained_weights as download_rfdetr_weights
+from yolo_training import train_yolo_model, download_pretrained_weights as download_yolo_weights
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Import our training modules
-from yolo_training import train_yolo_model, download_pretrained_weights as download_yolo_weights
-from rfdetr_training import train_rfdetr_model, download_pretrained_weights as download_rfdetr_weights
 
 
 class DirectTrainingPipeline:
@@ -107,9 +102,9 @@ class DirectTrainingPipeline:
                         yaml_config = {
                             "path": dataset_path,
                             "train":
-                            "train" if os.path.exists(train_dir) else "",
+                                "train" if os.path.exists(train_dir) else "",
                             "val":
-                            "valid" if os.path.exists(valid_dir) else "",
+                                "valid" if os.path.exists(valid_dir) else "",
                             "test": "test" if os.path.exists(test_dir) else "",
                             "names": {
                                 0: "class0",
@@ -172,18 +167,18 @@ class DirectTrainingPipeline:
         # Delegate to the appropriate training function based on model type
         if 'yolo' in model_variant:
             return train_yolo_model(
-                dataset_info, 
-                model_variant, 
-                hyperparameters, 
-                mlflow_run_id, 
+                dataset_info,
+                model_variant,
+                hyperparameters,
+                mlflow_run_id,
                 mlflow_tracking_uri
             )
         elif 'rf_detr' in model_variant:
             return train_rfdetr_model(
-                dataset_info, 
-                model_variant, 
-                hyperparameters, 
-                mlflow_run_id, 
+                dataset_info,
+                model_variant,
+                hyperparameters,
+                mlflow_run_id,
                 mlflow_tracking_uri
             )
         else:
@@ -301,7 +296,6 @@ def submit_direct_pipeline(config):
         run_id: A unique identifier for this run
     """
     # Generate a unique run ID
-    import uuid
     run_id = f"direct-{uuid.uuid4().hex}"
 
     # Create a copy of the config and add the run ID

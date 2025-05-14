@@ -1,33 +1,31 @@
-
-import os
-import sys
-import logging
-import time
-import json
+import argparse
 import glob
+import json
+import logging
+import os
 import subprocess
+import sys
+
 import cv2
 import numpy as np
-import torch
-import argparse
 import requests
-from PIL import Image, ImageDraw
-from datetime import datetime
-from tqdm import tqdm
-from collections import defaultdict
+import torch
+from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
+from tqdm import tqdm
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def download_pretrained_weights(model_variant, pretrained_dir=None):
     """Download pre-trained RF-DETR weights if not already present"""
     # Create pretrained directory if it doesn't exist
     if pretrained_dir is None:
         pretrained_dir = os.path.join(os.getcwd(), "pretrained")
-    
+
     if not os.path.exists(pretrained_dir):
         os.makedirs(pretrained_dir)
         logger.info(f"Created pretrained weights directory: {pretrained_dir}")
@@ -50,7 +48,8 @@ def download_pretrained_weights(model_variant, pretrained_dir=None):
     possible_filenames = [
         f"{model_variant}_pretrained.pt",
         f"{model_variant}_pretrained.pth", "rf-detr-base.pth" if 'r50'
-        in model_variant else "rf-detr-large.pth", "rf_detr_r50_3x.pth"
+                                                                 in model_variant else "rf-detr-large.pth",
+        "rf_detr_r50_3x.pth"
         if 'r50' in model_variant else "rf_detr_r101_3x.pth"
     ]
 
@@ -125,13 +124,9 @@ def download_pretrained_weights(model_variant, pretrained_dir=None):
 
         return None
 
+
 def convert_yolo_to_coco(yolo_dataset_path):
     """Converts a YOLO dataset to COCO format required by RF-DETR."""
-    import json
-    import os
-    import glob
-    from PIL import Image
-
     # Define paths
     train_img_dir = os.path.join(yolo_dataset_path, 'train', 'images')
     train_label_dir = os.path.join(yolo_dataset_path, 'train', 'labels')
@@ -245,8 +240,8 @@ def convert_yolo_to_coco(yolo_dataset_path):
 
                     # YOLO uses normalized coordinates (0-1) with center and dimensions
                     # COCO uses [x,y,width,height] in pixels from top-left corner
-                    x1 = (x_center - box_width/2) * width
-                    y1 = (y_center - box_height/2) * height
+                    x1 = (x_center - box_width / 2) * width
+                    y1 = (y_center - box_height / 2) * height
                     w = box_width * width
                     h = box_height * height
 
@@ -275,8 +270,10 @@ def convert_yolo_to_coco(yolo_dataset_path):
                 json.dump(coco_data, f)
             logger.info(f"Saved COCO file for {split}: {coco_output_path}")
 
-    logger.info(f"Conversion completed with {len(coco_data['images'])} images and {len(coco_data['annotations'])} annotations")
+    logger.info(
+        f"Conversion completed with {len(coco_data['images'])} images and {len(coco_data['annotations'])} annotations")
     return True
+
 
 class DetectionDataset(Dataset):
     def __init__(self, dataset_path, split='train', transform=None):
@@ -307,8 +304,8 @@ class DetectionDataset(Dataset):
 
         # Get image list (exclude JSON files)
         self.image_paths = glob.glob(os.path.join(images_dir, '*.jpg')) + \
-                          glob.glob(os.path.join(images_dir, '*.jpeg')) + \
-                          glob.glob(os.path.join(images_dir, '*.png'))
+                           glob.glob(os.path.join(images_dir, '*.jpeg')) + \
+                           glob.glob(os.path.join(images_dir, '*.png'))
 
         # Check if any images found
         if len(self.image_paths) == 0:
@@ -368,10 +365,10 @@ class DetectionDataset(Dataset):
                         box_width, box_height = float(parts[3]), float(parts[4])
 
                         # Convert to absolute coordinates and [x1,y1,x2,y2] format
-                        x1 = (x_center - box_width/2) * width
-                        y1 = (y_center - box_height/2) * height
-                        x2 = (x_center + box_width/2) * width
-                        y2 = (y_center + box_height/2) * height
+                        x1 = (x_center - box_width / 2) * width
+                        y1 = (y_center - box_height / 2) * height
+                        x2 = (x_center + box_width / 2) * width
+                        y2 = (y_center + box_height / 2) * height
 
                         boxes.append([x1, y1, x2, y2])
                         labels.append(class_id)
@@ -385,11 +382,12 @@ class DetectionDataset(Dataset):
             labels = torch.zeros(0, dtype=torch.long)
 
         return {
-            'image': image, 
-            'boxes': boxes, 
+            'image': image,
+            'boxes': boxes,
             'labels': labels,
             'image_path': img_path
         }
+
 
 def compute_metrics(model, validation_loader):
     """Calculate metrics on validation set"""
@@ -400,7 +398,6 @@ def compute_metrics(model, validation_loader):
     with torch.no_grad():
         for batch in validation_loader:
             for item in batch:
-                image = item['image']
                 # Run prediction
                 input_image = Image.open(item['image_path']).convert('RGB')
                 detections = model.predict(input_image, threshold=0.2)
@@ -420,11 +417,12 @@ def compute_metrics(model, validation_loader):
     # For simplicity, use simulated values with appropriate trends
     precision = 0.7
     recall = 0.65
-    mAP50 = 0.6
-    mAP50_95 = 0.4
+    m_ap50 = 0.6
+    m_ap50_95 = 0.4
 
     model.train()
-    return precision, recall, mAP50, mAP50_95
+    return precision, recall, m_ap50, m_ap50_95
+
 
 def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_id, mlflow_tracking_uri):
     """Train RF-DETR model with provided configuration"""
@@ -473,12 +471,11 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
         # Get training parameters
         total_epochs = int(hyperparameters.get('epochs', 50))
         batch_size = int(hyperparameters.get('batch_size', 8))
-        img_size = int(hyperparameters.get('img_size', 640))
         learning_rate = float(hyperparameters.get('learning_rate', 0.0001))
 
         # Get real dataset path
         dataset_path = dataset_info.get('dataset_path')
-        
+
         # Check if we need to use pre-trained weights
         pretrained_flag = hyperparameters.get('pretrained', False)
         if isinstance(pretrained_flag, str):
@@ -499,7 +496,7 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
 
         # Convert dataset to COCO format if needed
         if dataset_info['format_type'] == 'yolo':
-            logger.info(f"Converting YOLO format dataset to COCO format for RF-DETR training")
+            logger.info("Converting YOLO format dataset to COCO format for RF-DETR training")
             conversion_success = convert_yolo_to_coco(dataset_path)
             if not conversion_success:
                 logger.error("YOLO-to-COCO conversion failed")
@@ -546,50 +543,51 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
 
             if test_image_path and os.path.exists(test_image_path):
                 logger.info(f"Testing model with image: {test_image_path}")
-                
+
                 # Load image with PIL for compatibility
                 pil_image = Image.open(test_image_path)
                 cv_image = np.array(pil_image)
                 if cv_image.shape[2] == 3:  # If image is RGB
                     cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
-                
+
                 # Run prediction using PIL image
                 detections = model.predict(pil_image, threshold=0.2)
-                
+
                 # Log detection count
                 if hasattr(detections, 'class_id'):
                     detection_count = len(detections.class_id)
                 else:
                     detection_count = len(detections)
-                
+
                 logger.info(f"Model test successful: detected {detection_count} objects")
-                
+
                 # Save a visualization of detections for debugging
                 output_image_path = os.path.join(training_output_dir, "test_detection.jpg")
                 image_with_boxes = cv_image.copy()
-                
+
                 # Create an object_counts dictionary
                 object_counts = {}
                 for class_id in COCO_CLASSES:
                     object_counts[COCO_CLASSES[class_id]] = 0
-                
+
                 # Process detections based on format
-                if hasattr(detections, 'class_id') and hasattr(detections, 'confidence') and hasattr(detections, 'xyxy'):
+                if hasattr(detections, 'class_id') and hasattr(detections, 'confidence') and hasattr(detections,
+                                                                                                     'xyxy'):
                     # New structured format
                     labels = [
                         f"{COCO_CLASSES[class_id]} {confidence:.2f}"
                         for class_id, confidence
                         in zip(detections.class_id, detections.confidence)
                     ]
-                
+
                     for i, (class_id, bbox) in enumerate(zip(detections.class_id, detections.xyxy)):
                         class_name = COCO_CLASSES.get(class_id, f"Class {class_id}")
                         object_counts[class_name] = object_counts.get(class_name, 0) + 1
-                
+
                         x1, y1, x2, y2 = map(int, bbox)  # Convert to integers for cv2
                         cv2.rectangle(image_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                        cv2.putText(image_with_boxes, labels[i], 
-                                  (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                        cv2.putText(image_with_boxes, labels[i],
+                                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 else:
                     # Original dictionary format
                     for det in detections:
@@ -612,16 +610,16 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
                                 else:
                                     logger.warning(f"Unexpected box format: {box} ({type(box)})")
                                     continue
-                                
+
                                 # Get class info
                                 if 'class_id' in det:
                                     class_id = det['class_id']
                                     label = COCO_CLASSES.get(class_id, f"Class {class_id}")
                                 else:
                                     label = det.get('class', 'Object')
-                                
+
                                 score = float(det.get('score', 1.0))
-                            
+
                             elif isinstance(det, (list, tuple, np.ndarray)) and len(det) >= 6:
                                 # Tuple/list/array format [x1, y1, x2, y2, score, class_id]
                                 try:
@@ -651,12 +649,12 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
                             import traceback
                             logger.debug(f"Detection error: {traceback.format_exc()}")
                             continue
-                
+
                         # Draw the detection on the image
                         cv2.rectangle(image_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
                         cv2.putText(image_with_boxes, f"{label}: {score:.2f}",
-                                  (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                
+                                    (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
                 cv2.imwrite(output_image_path, image_with_boxes)
                 logger.info(f"Saved test detection image to {output_image_path}")
         except Exception as e:
@@ -677,26 +675,27 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
 
         if len(train_dataset) == 0:
             logger.error(f"No training data found in {dataset_path}/train/images")
-            raise ValueError(f"No training data found in dataset")
+            raise ValueError("No training data found in dataset")
 
         # Create data loaders
         train_loader = DataLoader(
-            train_dataset, 
+            train_dataset,
             batch_size=batch_size,
-            shuffle=True, 
+            shuffle=True,
             num_workers=1,
             collate_fn=lambda x: x  # To avoid batching of bounding boxes
         )
 
         val_loader = DataLoader(
-            val_dataset, 
+            val_dataset,
             batch_size=batch_size,
-            shuffle=False, 
+            shuffle=False,
             num_workers=1,
             collate_fn=lambda x: x
         )
 
-        logger.info(f"Created data loaders with {len(train_loader)} training batches and {len(val_loader)} validation batches")
+        logger.info(
+            f"Created data loaders with {len(train_loader)} training batches and {len(val_loader)} validation batches")
 
         # Prepare model for fine-tuning
         # Create Namespace with correct parameters
@@ -754,20 +753,21 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
             "resume": None
         }
 
-        logger.info(f"Direct call to model.train() with: epochs={total_epochs}, batch_size={batch_size}, lr={learning_rate}")
+        logger.info(
+            f"Direct call to model.train() with: epochs={total_epochs}, batch_size={batch_size}, lr={learning_rate}")
         logger.info(f"Dataset path: {dataset_path}")
-        
+
         # Ensure dataset_dir is passed correctly
         if not training_params.get('dataset_dir'):
             logger.warning("Missing dataset_dir parameter, setting explicitly")
             training_params['dataset_dir'] = dataset_path
-        
+
         logger.info(f"Training parameters: {training_params}")
-        
+
         # Run training
         model.train(**training_params)
-        
-        logger.info(f"Training completed successfully using direct syntax")
+
+        logger.info("Training completed successfully using direct syntax")
 
         # Training metrics
         metrics_history = {
@@ -780,14 +780,14 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
         }
 
         # Calculate final metrics
-        precision, recall, mAP50, mAP50_95 = compute_metrics(model, val_loader)
-        
+        precision, recall, m_ap50, m_ap50_95 = compute_metrics(model, val_loader)
+
         # Save metrics
         metrics_history["precision"].append(float(precision))
         metrics_history["recall"].append(float(recall))
-        metrics_history["mAP50"].append(float(mAP50))
-        metrics_history["mAP50-95"].append(float(mAP50_95))
-        
+        metrics_history["mAP50"].append(float(m_ap50))
+        metrics_history["mAP50-95"].append(float(m_ap50_95))
+
         # Save metrics history
         metrics_path = os.path.join(training_output_dir, "metrics.json")
         with open(metrics_path, 'w') as f:
@@ -812,27 +812,27 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
                 metrics_to_log = {
                     "precision": precision,
                     "recall": recall,
-                    "mAP50": mAP50,
-                    "mAP50-95": mAP50_95,
+                    "mAP50": m_ap50,
+                    "mAP50-95": m_ap50_95,
                     "epochs_completed": total_epochs
                 }
-                
+
                 # Log metrics one by one
                 for key, value in metrics_to_log.items():
                     try:
                         mlflow.log_metric(key, float(value))
                     except Exception as e:
                         logger.warning(f"Failed to log metric {key}: {str(e)}")
-                
+
                 # Log model artifact
                 if os.path.exists(model_path):
                     mlflow.log_artifact(model_path, artifact_path="model")
                     logger.info(f"Model artifact logged to MLFlow: {model_path}")
-                
+
                 # Log test detection image if available
                 if os.path.exists(output_image_path):
                     mlflow.log_artifact(output_image_path, artifact_path="test_images")
-                
+
                 logger.info("Successfully logged metrics and artifacts to MLFlow")
             except Exception as e:
                 logger.warning(f"Failed to log to MLFlow: {str(e)}")
@@ -845,8 +845,8 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
             "results": {
                 "precision": precision,
                 "recall": recall,
-                "mAP50": mAP50,
-                "mAP50-95": mAP50_95
+                "mAP50": m_ap50,
+                "mAP50-95": m_ap50_95
             }
         }
 
@@ -872,7 +872,7 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
                 }
             }
         else:
-            logger.error(f"No pretrained weights available as fallback")
+            logger.error("No pretrained weights available as fallback")
             # Return error without model
             return {
                 "model_path": None,

@@ -1,20 +1,21 @@
-import os
-import zipfile
 import logging
+import os
 import uuid
-import json
+import zipfile
 from datetime import datetime
+
 from flask import render_template, redirect, url_for, flash, request, jsonify, send_file
-from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
-from app import app, db
-from models import Dataset, TrainingJob, ModelArtifact, User
-from forms import DatasetUploadForm, YOLOConfigForm, RFDETRConfigForm
+
+from app import db
 from config import YOLO_MODEL_CONFIGS, RF_DETR_MODEL_CONFIGS, VALID_IMAGE_EXTENSIONS
+from forms import DatasetUploadForm, YOLOConfigForm, RFDETRConfigForm
 from ml_pipelines import start_training_job, get_job_status, cancel_training_job
 from ml_utils import validate_dataset, get_dataset_stats
+from models import Dataset, TrainingJob, ModelArtifact, User
 
 logger = logging.getLogger(__name__)
+
 
 # Create a default user if it doesn't exist
 def ensure_default_user():
@@ -30,8 +31,8 @@ def ensure_default_user():
         logger.info("Created default user")
     return default_user.id
 
-def register_routes(app):
 
+def register_routes(app):
     # Ensure default user exists when app starts
     with app.app_context():
         default_user_id = ensure_default_user()
@@ -41,7 +42,8 @@ def register_routes(app):
         # Always use the default user
         user_id = ensure_default_user()
         recent_datasets = Dataset.query.filter_by(user_id=user_id).order_by(Dataset.created_at.desc()).limit(5).all()
-        recent_jobs = TrainingJob.query.filter_by(user_id=user_id).order_by(TrainingJob.created_at.desc()).limit(5).all()
+        recent_jobs = TrainingJob.query.filter_by(user_id=user_id).order_by(TrainingJob.created_at.desc()).limit(
+            5).all()
 
         # Get stats for active jobs
         active_jobs = TrainingJob.query.filter(
@@ -49,10 +51,10 @@ def register_routes(app):
             TrainingJob.status.in_(['pending', 'running'])
         ).all()
 
-        return render_template('index.html', 
-                            recent_datasets=recent_datasets, 
-                            recent_jobs=recent_jobs,
-                            active_jobs=active_jobs)
+        return render_template('index.html',
+                               recent_datasets=recent_datasets,
+                               recent_jobs=recent_jobs,
+                               active_jobs=active_jobs)
 
     @app.route('/upload', methods=['GET', 'POST'])
     # Removed login_required decorator
@@ -66,8 +68,8 @@ def register_routes(app):
                 filename = secure_filename(zip_file.filename)
                 # Use a default user ID for demonstration purposes
                 user_id = 1
-                dataset_dir = os.path.join(app.config['UPLOAD_FOLDER'], 
-                                        f"dataset_{user_id}_{uuid.uuid4().hex}")
+                dataset_dir = os.path.join(app.config['UPLOAD_FOLDER'],
+                                           f"dataset_{user_id}_{uuid.uuid4().hex}")
                 os.makedirs(dataset_dir, exist_ok=True)
                 zip_path = os.path.join(dataset_dir, filename)
                 zip_file.save(zip_path)
@@ -160,7 +162,8 @@ def register_routes(app):
                                 if validation_result['valid']:
                                     dataset.image_count = validation_result['image_count']
                                     dataset.set_class_names(validation_result['classes'])
-                                    logger.info(f"Validated dataset with {validation_result['image_count']} images and classes: {validation_result['classes']}")
+                                    logger.info(
+                                        f"Validated dataset with {validation_result['image_count']} images and classes: {validation_result['classes']}")
                                 else:
                                     logger.warning(f"Dataset validation failed: {validation_result['error']}")
                                     # Count images manually as fallback
@@ -168,7 +171,8 @@ def register_routes(app):
                                     for subdir in ['train', 'test', 'valid']:
                                         subdir_path = os.path.join(full_path, subdir)
                                         if os.path.exists(subdir_path):
-                                            image_files = [f for f in os.listdir(subdir_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+                                            image_files = [f for f in os.listdir(subdir_path) if
+                                                           f.lower().endswith(('.jpg', '.jpeg', '.png'))]
                                             total_images += len(image_files)
                                     dataset.image_count = total_images
                                     # Try to get class names from README or other files
@@ -219,11 +223,11 @@ def register_routes(app):
         # Get associated training jobs
         jobs = TrainingJob.query.filter_by(dataset_id=dataset_id).order_by(TrainingJob.created_at.desc()).all()
 
-        return render_template('dataset_details.html', 
-                            title=f'Dataset: {dataset.name}',
-                            dataset=dataset,
-                            stats=stats,
-                            jobs=jobs)
+        return render_template('dataset_details.html',
+                               title=f'Dataset: {dataset.name}',
+                               dataset=dataset,
+                               stats=stats,
+                               jobs=jobs)
 
     @app.route('/configure', methods=['GET', 'POST'])
     # Removed login_required
@@ -334,11 +338,11 @@ def register_routes(app):
                 form.img_size.data = config_data[variant]['default_img_size']
                 form.learning_rate.data = config_data[variant]['default_learning_rate']
 
-        return render_template('configure.html', 
-                            title='Configure Training', 
-                            form=form, 
-                            model_type=model_type,
-                            config_data=config_data)
+        return render_template('configure.html',
+                               title='Configure Training',
+                               form=form,
+                               model_type=model_type,
+                               config_data=config_data)
 
     @app.route('/jobs')
     # Removed login_required
@@ -351,9 +355,9 @@ def register_routes(app):
     # Removed login_required
     def monitor_training(job_id):
         job = TrainingJob.query.get_or_404(job_id)
-        return render_template('monitor.html', 
-                            title=f'Monitor: {job.job_name}',
-                            job=job)
+        return render_template('monitor.html',
+                               title=f'Monitor: {job.job_name}',
+                               job=job)
 
     @app.route('/api/jobs/<int:job_id>/status')
     # Removed login_required
@@ -426,25 +430,25 @@ def register_routes(app):
             'mAP50': [],
             'loss': []
         }
-        
+
         # Make sure metrics_history will be properly JSON serializable
         for key in metrics_history:
             if not isinstance(metrics_history[key], list):
                 metrics_history[key] = []
-        
+
         # Try to get metrics history from MLFlow or create sample data if not available
         if job.mlflow_run_id and not job.mlflow_run_id.startswith('direct-'):
             try:
                 import mlflow
                 mlflow.set_tracking_uri(app.config.get("MLFLOW_TRACKING_URI", "http://localhost:5001"))
                 run = mlflow.get_run(job.mlflow_run_id)
-                
+
                 # If we have metrics from MLFlow, use those
                 if run and run.data.metrics:
-                    pass # In futuro potremmo estrarre dati reali qui
+                    pass  # In futuro potremmo estrarre dati reali qui
             except Exception as e:
                 logger.warning(f"Failed to get metrics history from MLFlow: {str(e)}")
-        
+
         # If no real metrics history is available, create sample data
         # This is a temporary solution until we implement real metrics tracking
         if not metrics_history['epochs'] and job.status == 'completed':
@@ -452,40 +456,40 @@ def register_routes(app):
             total_epochs = hyperparameters.get('epochs', 50)
             if isinstance(total_epochs, str):
                 total_epochs = int(total_epochs)
-                
+
             # Generate sample data points
             for i in range(1, total_epochs + 1):
                 metrics_history['epochs'].append(i)
-                
+
                 # Generate realistic training curves
                 # Start with lower values and improve over time
                 progress = i / total_epochs
-                
+
                 # Precision curve (starts at ~0.4, improves to final value)
                 precision_final = metrics.get('precision', 0.8)
-                metrics_history['precision'].append(0.4 + (precision_final - 0.4) * (1 - (1 - progress)**2))
-                
+                metrics_history['precision'].append(0.4 + (precision_final - 0.4) * (1 - (1 - progress) ** 2))
+
                 # Recall curve (starts at ~0.3, improves to final value)
-                recall_final = metrics.get('recall', 0.8) 
-                metrics_history['recall'].append(0.3 + (recall_final - 0.3) * (1 - (1 - progress)**2))
-                
+                recall_final = metrics.get('recall', 0.8)
+                metrics_history['recall'].append(0.3 + (recall_final - 0.3) * (1 - (1 - progress) ** 2))
+
                 # mAP50 curve (starts at ~0.2, improves to final value)
                 map_final = metrics.get('mAP50', 0.85)
-                metrics_history['mAP50'].append(0.2 + (map_final - 0.2) * (1 - (1 - progress)**2))
-                
-                # Loss curve (starts high, decreases over time)
-                metrics_history['loss'].append(1.0 * (1 - progress*0.8))
+                metrics_history['mAP50'].append(0.2 + (map_final - 0.2) * (1 - (1 - progress) ** 2))
 
-        return render_template('results.html', 
-                            title=f'Results: {job.job_name}',
-                            job=job,
-                            dataset=dataset,
-                            artifacts=artifacts,
-                            metrics=metrics,
-                            hyperparameters=hyperparameters,
-                            model_path=model_path,
-                            model_size=model_size,
-                            metrics_history=metrics_history)
+                # Loss curve (starts high, decreases over time)
+                metrics_history['loss'].append(1.0 * (1 - progress * 0.8))
+
+        return render_template('results.html',
+                               title=f'Results: {job.job_name}',
+                               job=job,
+                               dataset=dataset,
+                               artifacts=artifacts,
+                               metrics=metrics,
+                               hyperparameters=hyperparameters,
+                               model_path=model_path,
+                               model_size=model_size,
+                               metrics_history=metrics_history)
 
     @app.route('/download/<int:artifact_id>')
     # Removed login_required
@@ -501,9 +505,9 @@ def register_routes(app):
         # Determine file type and set download name
         filename = os.path.basename(artifact.artifact_path)
 
-        return send_file(artifact.artifact_path, 
-                        as_attachment=True,
-                        download_name=filename)
+        return send_file(artifact.artifact_path,
+                         as_attachment=True,
+                         download_name=filename)
 
     @app.route('/test')
     # Removed login_required
@@ -511,78 +515,78 @@ def register_routes(app):
         # Get completed training jobs with successful model artifacts
         user_id = ensure_default_user()
         models = db.session.query(TrainingJob).join(
-            ModelArtifact, 
+            ModelArtifact,
             TrainingJob.id == ModelArtifact.training_job_id
         ).filter(
             TrainingJob.user_id == user_id,
             TrainingJob.status == 'completed',
             ModelArtifact.artifact_type == 'weights'
         ).all()
-        
+
         return render_template('test.html', title='Test Models', models=models)
-    
+
     @app.route('/api/test/inference', methods=['POST'])
     # Removed login_required
     def run_inference():
         if 'image' not in request.files:
             return jsonify({'error': 'No image provided'}), 400
-            
+
         if 'model_id' not in request.form:
             return jsonify({'error': 'No model selected'}), 400
-            
+
         # Get uploaded image
         image_file = request.files['image']
         if image_file.filename == '':
             return jsonify({'error': 'No image selected'}), 400
-            
+
         # Check if the file is allowed
         if not image_file.filename.lower().endswith(tuple(VALID_IMAGE_EXTENSIONS)):
             return jsonify({'error': 'Invalid image format. Please upload a JPG, JPEG or PNG file'}), 400
-        
+
         # Get model details
         model_id = request.form['model_id']
         threshold = float(request.form.get('threshold', 0.25))
-        
+
         try:
             # Get model artifact path
             job = TrainingJob.query.get_or_404(model_id)
             artifact = ModelArtifact.query.filter_by(
-                training_job_id=model_id, 
+                training_job_id=model_id,
                 artifact_type='weights'
             ).first()
-            
+
             if not artifact or not os.path.exists(artifact.artifact_path):
                 return jsonify({'error': 'Model file not found'}), 404
-                
+
             # Create temporary directory for test images
             test_dir = os.path.join(app.static_folder, 'test_images')
             os.makedirs(test_dir, exist_ok=True)
-                
+
             # Save uploaded image
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             filename = f"test_{timestamp}_{secure_filename(image_file.filename)}"
             image_path = os.path.join(test_dir, filename)
             image_file.save(image_path)
-            
+
             # Output path for result image
             output_filename = f"result_{timestamp}_{secure_filename(image_file.filename)}"
             output_path = os.path.join(test_dir, output_filename)
-            
+
             # Run inference based on model type
             import time
             start_time = time.time()
-            
+
             if job.model_type == 'rf-detr':
                 # Use RF-DETR prediction function
                 try:
                     # Import RF-DETR predictor
                     from rfdetr_predict import predict_image
-                    
+
                     # Determine model variant (base or large)
                     model_variant = "large" if "r101" in job.model_variant.lower() else "base"
-                    
+
                     logger.info(f"Running RF-DETR inference with {model_variant} model from {artifact.artifact_path}")
-                    
+
                     # Run prediction
                     detections = predict_image(
                         model_path=artifact.artifact_path,
@@ -591,10 +595,10 @@ def register_routes(app):
                         threshold=threshold,
                         model_type=model_variant
                     )
-                    
+
                     # Format detections for response
                     formatted_detections = []
-                    
+
                     # Handle different possible detection formats returned by RF-DETR
                     if detections is None:
                         logger.warning("RF-DETR returned None detections")
@@ -603,7 +607,7 @@ def register_routes(app):
                         # Structured format with attributes
                         from rfdetr.util.coco_classes import COCO_CLASSES
                         logger.info(f"RF-DETR returned structured detections: {len(detections.class_id)} objects")
-                        
+
                         for i, (class_id, confidence) in enumerate(zip(detections.class_id, detections.confidence)):
                             bbox = detections.xyxy[i]
                             # Ensure box is in the right format for JSON serialization
@@ -611,9 +615,9 @@ def register_routes(app):
                                 box_coords = bbox.tolist()
                             else:
                                 box_coords = [float(c) for c in bbox]
-                                
+
                             class_name = COCO_CLASSES.get(class_id, f'Class {class_id}')
-                            
+
                             formatted_detections.append({
                                 'class': class_name,
                                 'confidence': float(confidence),
@@ -622,7 +626,7 @@ def register_routes(app):
                     else:
                         # Dictionary format
                         logger.info(f"RF-DETR returned dictionary detections: {len(detections)} objects")
-                        
+
                         for det in detections:
                             # Get class name from either class_id using COCO_CLASSES or directly from 'class' key
                             if 'class_id' in det:
@@ -630,7 +634,7 @@ def register_routes(app):
                                 class_name = COCO_CLASSES.get(det['class_id'], f"Class {det['class_id']}")
                             else:
                                 class_name = det.get('class', 'Unknown')
-                            
+
                             # Handle box coordinates
                             box = det.get('box', [0, 0, 10, 10])  # Default if missing
                             if hasattr(box, 'tolist'):
@@ -645,46 +649,46 @@ def register_routes(app):
                                 except Exception as e:
                                     logger.error(f"Error converting box coordinates: {str(e)}")
                                     box_coords = [0, 0, 10, 10]  # Fallback
-                            
+
                             formatted_detections.append({
                                 'class': class_name,
                                 'confidence': float(det.get('score', 0)),
                                 'box': box_coords
                             })
-                
+
                 except Exception as e:
                     logger.exception(f"Error during RF-DETR inference: {str(e)}")
                     return jsonify({'error': f"Error with RF-DETR inference: {str(e)}"}), 500
-                
+
             elif job.model_type == 'yolo':
                 # Use YOLO prediction
                 try:
                     import torch
                     from pathlib import Path
                     import sys
-                    
+
                     # Check if it's a YOLOv8 model (YOLOv8 models usually end with .pt)
                     model_path = artifact.artifact_path
                     is_yolov8 = "yolov8" in job.model_variant.lower()
-                    
+
                     if is_yolov8:
                         # Use YOLO directly from Ultralytics
                         try:
                             from ultralytics import YOLO
                             model = YOLO(model_path)
-                            
+
                             # Run inference
                             results = model(image_path, conf=threshold)
-                            
+
                             # Save results image with boxes
                             for r in results:
                                 im_array = r.plot()  # plot a BGR numpy array of predictions
                                 import cv2
                                 cv2.imwrite(output_path, im_array)
-                            
+
                             # Format detections for response
                             formatted_detections = []
-                            
+
                             # Extract detections from results
                             if results and len(results) > 0:
                                 for result in results:
@@ -693,9 +697,9 @@ def register_routes(app):
                                             x1, y1, x2, y2 = box.xyxy[0].tolist()
                                             conf = float(box.conf[0])
                                             cls_id = int(box.cls[0])
-                                            
+
                                             class_name = result.names[cls_id] if result.names else f"Class {cls_id}"
-                                            
+
                                             formatted_detections.append({
                                                 'class': class_name,
                                                 'confidence': conf,
@@ -709,32 +713,33 @@ def register_routes(app):
                         model_dir = Path(model_path).parent
                         if str(model_dir) not in sys.path:
                             sys.path.insert(0, str(model_dir))
-                        
+
                         # Now try to load with torch hub
                         model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_path, force_reload=True)
-                        
+
                         # Set confidence threshold
                         model.conf = threshold
-                        
+
                         # Run inference
                         results = model(image_path)
-                        
+
                         # Save results image
                         results.save(output_path)
-                        
+
                         # Format detections for response
                         formatted_detections = []
-                        
+
                         # Extract detections from results
-                        for detection in results.xyxy[0]:  # results.xyxy[0] is a tensor with detections for the first image
+                        for detection in results.xyxy[
+                            0]:  # results.xyxy[0] is a tensor with detections for the first image
                             x1, y1, x2, y2, conf, cls_id = detection.tolist()
-                            
+
                             # Get class name
                             if hasattr(model, 'names'):
                                 class_name = model.names[int(cls_id)]
                             else:
                                 class_name = f"Class {int(cls_id)}"
-                                
+
                             formatted_detections.append({
                                 'class': class_name,
                                 'confidence': float(conf),
@@ -745,10 +750,10 @@ def register_routes(app):
                     return jsonify({'error': f"Error running YOLO inference: {str(e)}"}), 500
             else:
                 return jsonify({'error': f"Unsupported model type: {job.model_type}"}), 400
-            
+
             end_time = time.time()
             inference_time = round((end_time - start_time) * 1000, 2)  # Convert to milliseconds
-            
+
             # Build response
             response = {
                 'image_url': url_for('static', filename=f'test_images/{output_filename}'),
@@ -760,9 +765,9 @@ def register_routes(app):
                     'variant': job.model_variant
                 }
             }
-            
+
             return jsonify(response)
-            
+
         except Exception as e:
             logger.exception(f"Error during inference: {str(e)}")
             return jsonify({'error': f"Error processing image: {str(e)}"}), 500
@@ -795,7 +800,7 @@ def register_routes(app):
             return jsonify({'success': True, 'message': 'Metriche e artefatti sincronizzati con MLFlow'})
         else:
             return jsonify({'error': 'Errore durante la sincronizzazione con MLFlow'}), 500
-    
+
     @app.route('/api/datasets/delete', methods=['POST'])
     # Removed login_required
     def delete_datasets():
@@ -803,14 +808,14 @@ def register_routes(app):
         data = request.json
         if not data or 'dataset_ids' not in data:
             return jsonify({'error': 'No dataset IDs provided'}), 400
-        
+
         dataset_ids = data['dataset_ids']
         if not dataset_ids:
             return jsonify({'error': 'No dataset IDs provided'}), 400
-        
+
         deleted_count = 0
         errors = []
-        
+
         for dataset_id in dataset_ids:
             try:
                 dataset = Dataset.query.get(dataset_id)
@@ -819,7 +824,7 @@ def register_routes(app):
                     if dataset.training_jobs.count() > 0:
                         errors.append(f"Cannot delete dataset '{dataset.name}' as it has associated training jobs")
                         continue
-                    
+
                     # Delete physical files
                     if os.path.exists(dataset.data_path):
                         import shutil
@@ -829,22 +834,22 @@ def register_routes(app):
                             logger.error(f"Error deleting dataset files: {str(e)}")
                             errors.append(f"Error deleting files for dataset '{dataset.name}'")
                             continue
-                    
+
                     # Delete database record
                     db.session.delete(dataset)
                     deleted_count += 1
             except Exception as e:
                 logger.exception(f"Error deleting dataset {dataset_id}")
                 errors.append(f"Error deleting dataset ID {dataset_id}: {str(e)}")
-        
+
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'deleted_count': deleted_count,
             'errors': errors
         })
-    
+
     @app.route('/api/jobs/delete', methods=['POST'])
     # Removed login_required
     def delete_jobs():
@@ -852,14 +857,14 @@ def register_routes(app):
         data = request.json
         if not data or 'job_ids' not in data:
             return jsonify({'error': 'No job IDs provided'}), 400
-        
+
         job_ids = data['job_ids']
         if not job_ids:
             return jsonify({'error': 'No job IDs provided'}), 400
-        
+
         deleted_count = 0
         errors = []
-        
+
         for job_id in job_ids:
             try:
                 job = TrainingJob.query.get(job_id)
@@ -868,7 +873,7 @@ def register_routes(app):
                     if job.status == 'running':
                         errors.append(f"Cannot delete job '{job.job_name}' as it is currently running")
                         continue
-                    
+
                     # Delete artifacts
                     for artifact in ModelArtifact.query.filter_by(training_job_id=job.id).all():
                         if os.path.exists(artifact.artifact_path):
@@ -876,18 +881,18 @@ def register_routes(app):
                                 os.remove(artifact.artifact_path)
                             except Exception as e:
                                 logger.error(f"Error deleting artifact file: {str(e)}")
-                        
+
                         db.session.delete(artifact)
-                    
+
                     # Delete job record
                     db.session.delete(job)
                     deleted_count += 1
             except Exception as e:
                 logger.exception(f"Error deleting job {job_id}")
                 errors.append(f"Error deleting job ID {job_id}: {str(e)}")
-        
+
         db.session.commit()
-        
+
         return jsonify({
             'success': True,
             'deleted_count': deleted_count,

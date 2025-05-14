@@ -1,24 +1,20 @@
-
-import os
-import sys
 import logging
-import time
-import json
-import glob
+import os
+
 import requests
 from tqdm import tqdm
-from datetime import datetime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def download_pretrained_weights(model_variant, pretrained_dir=None):
     """Download pre-trained YOLO weights if not already present"""
     # Create pretrained directory if it doesn't exist
     if pretrained_dir is None:
         pretrained_dir = os.path.join(os.getcwd(), "pretrained")
-    
+
     if not os.path.exists(pretrained_dir):
         os.makedirs(pretrained_dir)
         logger.info(f"Created pretrained weights directory: {pretrained_dir}")
@@ -87,6 +83,7 @@ def download_pretrained_weights(model_variant, pretrained_dir=None):
     except Exception as e:
         logger.error(f"Failed to download pre-trained weights: {str(e)}")
         return None
+
 
 def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id, mlflow_tracking_uri):
     """Train YOLO model with provided configuration"""
@@ -301,7 +298,7 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
                 if os.path.exists(model_path):
                     mlflow.log_artifact(model_path, artifact_path="model")
                     logger.info(f"Model artifact logged to MLFlow: {model_path}")
-                
+
                 # Log plot images as artifacts
                 results_dir = os.path.join(os.getcwd(), f"training_jobs/job_{mlflow_run_id[:8]}")
                 if os.path.exists(results_dir):
@@ -313,7 +310,7 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
                                     rel_path = os.path.relpath(root, results_dir)
                                     mlflow.log_artifact(img_path, artifact_path=f"plots/{rel_path}")
                                     logger.info(f"Logged plot to MLFlow: {img_path}")
-                
+
                 logger.info(f"All metrics and artifacts logged to MLFlow")
             except Exception as e:
                 logger.warning(f"Failed to log to MLFlow: {str(e)}")
