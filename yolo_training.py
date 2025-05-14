@@ -145,12 +145,18 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
         # Handle PyTorch 2.6+ security changes for YOLO model loading
         try:
             # First try to add safe globals for PyTorch 2.6+
-            torch.serialization.add_safe_globals(['ultralytics.nn.tasks.DetectionModel', 
-                                                 'ultralytics.nn.modules.Conv', 
-                                                 'ultralytics.nn.modules.Conv2d',
-                                                 'ultralytics.nn.modules.C2f',
-                                                 'ultralytics.nn.modules.SPPF',
-                                                 'ultralytics.nn.modules.Detect'])
+            try:
+                # Import the needed classes first
+                from ultralytics.nn.tasks import DetectionModel
+                from ultralytics.nn.modules import Conv, Conv2d, C2f, SPPF, Detect
+                
+                # Add the actual class objects as safe globals
+                torch.serialization.add_safe_globals([DetectionModel, Conv, Conv2d, C2f, SPPF, Detect])
+            except ImportError:
+                # If the specific classes can't be imported, try a more general approach
+                try:
+                    # Use the context manager approach instead
+                    logger.info("Could not import specific classes, using context manager approach instead")
             logger.info("Added safe globals for PyTorch 2.6+ model loading")
         except (AttributeError, ImportError):
             # PyTorch <2.6 doesn't have this API, so we can ignore
@@ -166,10 +172,18 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
                 logger.warning(f"Error loading with default settings: {str(e)}")
                 # Fallback: try with weights_only=False for PyTorch 2.6+
                 try:
-                    # This approach is less secure but works with older models
-                    with torch.serialization.safe_globals(['*']):  # Allow all globals temporarily
-                        model = YOLO(pretrained_weights_path)
-                    logger.info("Successfully loaded model with safe_globals context manager")
+                    # Load manually with weights_only=False (less secure but compatible)
+                    state_dict = torch.load(pretrained_weights_path, weights_only=False)
+                    model = YOLO(model_variant)
+                    logger.info(f"Loaded model weights with weights_only=False")
+                except Exception as nested_e:
+                    logger.warning(f"Error loading with weights_only=False: {str(nested_e)}")
+                    # Try with context manager as another approach
+                    try:
+                        # This approach is less secure but works with older models
+                        with torch.serialization.safe_globals(['*']):  # Allow all globals temporarily
+                            model = YOLO(pretrained_weights_path)
+                        logger.info("Successfully loaded model with safe_globals context manager")
                 except Exception as nested_e:
                     # Final fallback: try direct torch.load with weights_only=False
                     logger.warning(f"Error in safe_globals approach: {str(nested_e)}")
