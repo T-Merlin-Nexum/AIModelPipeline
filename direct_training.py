@@ -144,7 +144,9 @@ class DirectTrainingPipeline:
         if 'yolo' in model_variant:
             return download_yolo_weights(model_variant)
         elif 'rf_detr' in model_variant:
-            return download_rfdetr_weights(model_variant)
+            # RF-DETR models are already pretrained, just get model info
+            from rfdetr_training import get_pretrained_model_info
+            return get_pretrained_model_info(model_variant)
         else:
             logger.warning(f"Unknown model variant: {model_variant}, cannot determine weights")
             return None
