@@ -5,7 +5,7 @@ import uuid
 
 import yaml
 
-from rfdetr_training import train_rfdetr_model, download_pretrained_weights as download_rfdetr_weights
+from rfdetr_training import train_rfdetr_model, get_pretrained_model_info
 from yolo_training import train_yolo_model, download_pretrained_weights as download_yolo_weights
 
 # Set up logging

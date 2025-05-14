@@ -20,109 +20,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def download_pretrained_weights(model_variant, pretrained_dir=None):
-    """Download pre-trained RF-DETR weights if not already present"""
-    # Create pretrained directory if it doesn't exist
-    if pretrained_dir is None:
-        pretrained_dir = os.path.join(os.getcwd(), "pretrained")
-
-    if not os.path.exists(pretrained_dir):
-        os.makedirs(pretrained_dir)
-        logger.info(f"Created pretrained weights directory: {pretrained_dir}")
-
-    # Define model weights URLs based on variant
-    pretrained_urls = {
-        # RF-DETR models
-        'rf_detr_r50': 'https://github.com/IDEA-Research/detrex-storage/releases/download/rf-detr-v1.0/rf_detr_r50_3x.pth',
-        'rf_detr_r101': 'https://github.com/IDEA-Research/detrex-storage/releases/download/rf-detr-v1.0/rf_detr_r101_3x.pth'
-    }
-
-    logger.info(f"Available RF-DETR pretrained model variants: {list(pretrained_urls.keys())}")
-
-    # Check if variant exists in our mapping
-    if model_variant not in pretrained_urls:
-        logger.warning(f"No pre-trained weights URL defined for variant: {model_variant}")
-        return None
-
-    # For RF-DETR, check for the .pth files with different naming patterns
-    possible_filenames = [
-        f"{model_variant}_pretrained.pt",
-        f"{model_variant}_pretrained.pth", "rf-detr-base.pth" if 'r50'
-                                                                 in model_variant else "rf-detr-large.pth",
-        "rf_detr_r50_3x.pth"
-        if 'r50' in model_variant else "rf_detr_r101_3x.pth"
-    ]
-
-    # Also check for any .pth file that might contain the model name
+def get_pretrained_model_info(model_variant):
+    """Get information about the pretrained RF-DETR model variant"""
+    # RF-DETR models are already pretrained, no need to download weights
+    logger.info(f"Using built-in pretrained weights for RF-DETR model variant: {model_variant}")
+    
     if 'r50' in model_variant:
-        pattern = os.path.join(pretrained_dir, "*r50*.pth")
-        pattern2 = os.path.join(pretrained_dir, "*base*.pth")
-        pth_files = glob.glob(pattern) + glob.glob(pattern2)
-        if pth_files:
-            logger.info(f"Found matching RF-DETR model files: {pth_files}")
-            possible_filenames.extend([os.path.basename(f) for f in pth_files])
+        return {
+            'type': 'base',
+            'backbone': 'ResNet-50'
+        }
     elif 'r101' in model_variant:
-        pattern = os.path.join(pretrained_dir, "*r101*.pth")
-        pattern2 = os.path.join(pretrained_dir, "*large*.pth")
-        pth_files = glob.glob(pattern) + glob.glob(pattern2)
-        if pth_files:
-            logger.info(f"Found matching RF-DETR model files: {pth_files}")
-            possible_filenames.extend([os.path.basename(f) for f in pth_files])
-
-    # Check if weights already exist with any of the possible filenames
-    for filename in possible_filenames:
-        weights_path = os.path.join(pretrained_dir, filename)
-        if os.path.exists(weights_path):
-            logger.info(f"Pre-trained weights found at: {weights_path}")
-            return weights_path
-
-    # If we reach here, no local files were found. Try to find any .pth file for RF-DETR
-    all_pth_files = glob.glob(os.path.join(pretrained_dir, "*.pth"))
-    if all_pth_files:
-        logger.info(f"Found potential RF-DETR model file: {all_pth_files[0]}")
-        return all_pth_files[0]
-
-    # Define the standard filename for downloading
-    weights_filename = f"{model_variant}_pretrained.pth"
-    weights_path = os.path.join(pretrained_dir, weights_filename)
-
-    # Download weights if they don't exist locally
-    url = pretrained_urls[model_variant]
-    logger.info(f"Downloading pre-trained weights for {model_variant} from {url}")
-
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        # Get file size for progress bar
-        total_size = int(response.headers.get('content-length', 0))
-        block_size = 8192  # 8 KB
-
-        with open(weights_path, 'wb') as f, tqdm(
-                desc=f"Downloading {weights_filename}",
-                total=total_size,
-                unit='B',
-                unit_scale=True,
-                unit_divisor=1024,
-        ) as progress_bar:
-            for data in response.iter_content(block_size):
-                f.write(data)
-                progress_bar.update(len(data))
-
-        logger.info(f"Successfully downloaded pre-trained weights to: {weights_path}")
-        return weights_path
-
-    except Exception as e:
-        logger.error(f"Failed to download pre-trained weights: {str(e)}")
-
-        # Check for any .pth file as fallback
-        logger.info("Looking for any .pth file as fallback for RF-DETR model...")
-        all_pth_files = glob.glob(os.path.join(pretrained_dir, "*.pth"))
-        if all_pth_files:
-            logger.info(f"Using fallback RF-DETR model file: {all_pth_files[0]}")
-            return all_pth_files[0]
-
-        return None
+        return {
+            'type': 'large',
+            'backbone': 'ResNet-101'
+        }
+    else:
+        logger.warning(f"Unknown model variant: {model_variant}, defaulting to RF-DETR base model")
+        return {
+            'type': 'base',
+            'backbone': 'ResNet-50' 
+        }
 
 
 def convert_yolo_to_coco(yolo_dataset_path):
@@ -465,16 +383,19 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
         # Get real dataset path
         dataset_path = dataset_info.get('dataset_path')
 
-        # Check if we need to use pre-trained weights
-        pretrained_flag = hyperparameters.get('pretrained', False)
+        # RF-DETR models are already pretrained, we just need to select the right variant
+        pretrained_flag = hyperparameters.get('pretrained', True)
         if isinstance(pretrained_flag, str):
             pretrained_flag = pretrained_flag.lower() == 'true'
-
+            
+        model_info = get_pretrained_model_info(model_variant)
+        
         if pretrained_flag:
-            logger.info(f"Using pre-trained weights for {model_variant}")
-            model_weights = download_pretrained_weights(model_variant)
+            logger.info(f"Using built-in pre-trained weights for {model_variant}")
+            # We'll set this to None since we'll use the built-in pretrained weights
+            model_weights = None
         else:
-            logger.info("Not using pre-trained weights as specified in hyperparameters")
+            logger.info("Note: RF-DETR models are already pretrained by default")
             model_weights = None
 
         # Prepare dataset
@@ -499,13 +420,13 @@ def train_rfdetr_model(dataset_info, model_variant, hyperparameters, mlflow_run_
                 logger.error(f"COCO file not found after conversion: {train_coco_file}")
                 raise Exception("COCO annotation file not created during conversion")
 
-        # Initialize model based on variant
-        logger.info(f"Initializing RF-DETR model with weights from: {model_weights}")
-        if "r101" in model_variant:
-            model = RFDETRLarge(pretrain_weights=model_weights)
+        # Initialize model based on variant (models already have pretrained weights)
+        logger.info(f"Initializing RF-DETR model: {model_info['type']} with {model_info['backbone']} backbone")
+        if model_info['type'] == 'large':
+            model = RFDETRLarge()
             logger.info("Using RF-DETR Large model with ResNet-101 backbone")
         else:
-            model = RFDETRBase(pretrain_weights=model_weights)
+            model = RFDETRBase()
             logger.info("Using RF-DETR Base model with ResNet-50 backbone")
 
         # Add method to set args in model
