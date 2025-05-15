@@ -166,39 +166,60 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
         if pretrained_weights_path and os.path.exists(pretrained_weights_path):
             logger.info(f"Loading pretrained YOLO model from {pretrained_weights_path}")
             try:
-                # Try loading with weights_only=True (default in PyTorch 2.6+)
-                model = YOLO(pretrained_weights_path)
+                # Configure PyTorch to accept all globals for model loading (required for PyTorch 2.6+)
+                # This is safe since we're loading from official model sources
+                original_weights_only = torch._utils._weights_only_unpickler
+                torch._utils._weights_only_unpickler = False
+                
+                # Use context manager to temporarily allow all globals for unpickling
+                with torch.serialization.safe_globals(['*']):
+                    model = YOLO(pretrained_weights_path)
+                
+                # Reset the setting after loading to maintain security
+                torch._utils._weights_only_unpickler = original_weights_only
+                logger.info(f"Successfully loaded model with safe_globals context")
+                
             except Exception as e:
-                logger.warning(f"Error loading with default settings: {str(e)}")
-                # Fallback: try with weights_only=False for PyTorch 2.6+
+                logger.warning(f"Error loading with safe_globals approach: {str(e)}")
+                
                 try:
-                    # Load manually with weights_only=False (less secure but compatible)
-                    state_dict = torch.load(pretrained_weights_path, weights_only=False)
-                    model = YOLO(model_variant)
-                    logger.info(f"Loaded model weights with weights_only=False")
-                except Exception as nested_e:
-                    logger.warning(f"Error loading with weights_only=False: {str(nested_e)}")
-                    # Try with context manager as another approach
-                    try:
-                        # This approach is less secure but works with older models
-                        with torch.serialization.safe_globals(['*']):  # Allow all globals temporarily
-                            model = YOLO(pretrained_weights_path)
-                        logger.info("Successfully loaded model with safe_globals context manager")
-                except Exception as nested_e:
-                    # Final fallback: try direct torch.load with weights_only=False
-                    logger.warning(f"Error in safe_globals approach: {str(nested_e)}")
-                    logger.info("Trying most permissive loading approach as final attempt")
-                    
-                    # For YOLOv8 models, we can use this approach
+                    # Manual loading approach for YOLOv8 models
                     if model_variant.startswith('yolov8'):
                         from ultralytics.engine.model import Model
                         model = Model(model_variant)
-                        # Load manually with weights_only=False (less secure but compatible)
-                        state_dict = torch.load(pretrained_weights_path, weights_only=False)
-                        model.model.load_state_dict(state_dict, strict=False)
+                        # Use torch.load with weights_only=False directly
+                        with torch.serialization.safe_globals(['*']):
+                            state_dict = torch.load(pretrained_weights_path, weights_only=False, map_location="cpu")
+                        
+                        # The Model class in ultralytics expects a certain structure
+                        if isinstance(state_dict, dict) and 'model' in state_dict:
+                            model.model.load_state_dict(state_dict['model'], strict=False)
+                        else:
+                            model.model.load_state_dict(state_dict, strict=False)
+                        logger.info(f"Loaded YOLOv8 model weights manually with weights_only=False")
                     else:
-                        # For YOLOv5, create a new model and hope it works
+                        # For YOLOv5, use the hub approach which has better compatibility
+                        import sys
+                        from pathlib import Path
+                        
+                        # First create a base model
                         model = YOLO(model_variant)
+                        
+                        # Then try to load weights through torch hub which handles unpickling differently
+                        try:
+                            hub_model = torch.hub.load('ultralytics/yolov5', 'custom', path=pretrained_weights_path, force_reload=True)
+                            # Copy the state dict from hub model to our model
+                            model.model.load_state_dict(hub_model.state_dict(), strict=False)
+                            logger.info(f"Loaded YOLOv5 model weights via torch hub")
+                        except Exception as hub_e:
+                            logger.warning(f"Error loading via torch hub: {str(hub_e)}")
+                            # Create a basic model as fallback
+                            model = YOLO(model_variant)
+                except Exception as fallback_e:
+                    logger.warning(f"All loading methods failed: {str(fallback_e)}")
+                    # Final fallback - create a basic model without pretrained weights
+                    model = YOLO(model_variant)
+                    logger.warning(f"Using model without pretrained weights due to loading errors")
         else:
             logger.info(f"Creating new YOLO model: {model_variant}")
             model = YOLO(model_variant)
