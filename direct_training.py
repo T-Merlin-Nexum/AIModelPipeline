@@ -1,12 +1,11 @@
 import logging
-import os
 import threading
 import uuid
 
 import yaml
 
-from rfdetr_training import train_rfdetr_model, get_pretrained_model_info
-from yolo_training import train_yolo_model, download_pretrained_weights as download_yolo_weights
+from rfdetr_training import train_rfdetr_model
+from yolo_training import train_yolo_model
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -135,20 +134,6 @@ class DirectTrainingPipeline:
             logger.exception(f"Error loading dataset: {str(e)}")
             # Return default path when exceptions occur
             return {"dataset_path": f"coco8", "format_type": "yolo"}
-
-    def download_pretrained_weights(self, model_variant):
-        """Download pre-trained weights if not already present"""
-        # Delegate to appropriate module based on model variant
-        if 'yolo' in model_variant:
-            return download_yolo_weights(model_variant)
-        elif 'rf_detr' in model_variant:
-            # RF-DETR models are already pretrained, just get model info
-            return get_pretrained_model_info(model_variant)
-        else:
-            logger.warning(
-                f"Unknown model variant: {model_variant}, cannot determine weights"
-            )
-            return None
 
     def train_model(self, dataset_info, model_variant, hyperparameters,
                     mlflow_run_id, mlflow_tracking_uri):

@@ -1,92 +1,15 @@
 import logging
 import os
+import shutil  # Added for copying files
+import traceback  # Added for detailed error logging
 
-import requests
-from tqdm import tqdm
-from ultralytics.nn.tasks import DetectionModel
-from ultralytics.nn.modules import Conv, Conv2, C2f, SPPF, Detect
-from ultralytics.engine.model import Model
-
+import mlflow
+import yaml  # Added for dataset YAML creation
+from ultralytics import YOLO, settings
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-def download_pretrained_weights(model_variant, pretrained_dir=None):
-    """Download pre-trained YOLO weights if not already present"""
-    # Create pretrained directory if it doesn't exist
-    if pretrained_dir is None:
-        pretrained_dir = os.path.join(os.getcwd(), "pretrained")
-
-    if not os.path.exists(pretrained_dir):
-        os.makedirs(pretrained_dir)
-        logger.info(f"Created pretrained weights directory: {pretrained_dir}")
-
-    # Define model weights URLs based on variant
-    pretrained_urls = {
-        # YOLO models
-        'yolov5s': 'https://github.com/ultralytics/yolov5/releases/download/v6.1/yolov5s.pt',
-        'yolov5m': 'https://github.com/ultralytics/yolov5/releases/download/v6.1/yolov5m.pt',
-        'yolov5l': 'https://github.com/ultralytics/yolov5/releases/download/v6.1/yolov5l.pt',
-        'yolov5x': 'https://github.com/ultralytics/yolov5/releases/download/v6.1/yolov5x.pt',
-        'yolov8n': 'https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8n.pt',
-        'yolov8s': 'https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8s.pt',
-        'yolov8m': 'https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8m.pt',
-        'yolov8l': 'https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8l.pt',
-        'yolov8x': 'https://github.com/ultralytics/assets/releases/download/v0.0.0/yolov8x.pt',
-    }
-
-    logger.info(f"Available YOLO pretrained model variants: {list(pretrained_urls.keys())}")
-
-    # Check if variant exists in our mapping
-    if model_variant not in pretrained_urls:
-        logger.warning(f"No pre-trained weights URL defined for variant: {model_variant}")
-        return None
-
-    # Determine weights filename based on model variant
-    possible_filenames = [f"{model_variant}_pretrained.pt", f"{model_variant}.pt"]
-
-    # Check if weights already exist with any of the possible filenames
-    for filename in possible_filenames:
-        weights_path = os.path.join(pretrained_dir, filename)
-        if os.path.exists(weights_path):
-            logger.info(f"Pre-trained weights found at: {weights_path}")
-            return weights_path
-
-    # Define the standard filename for downloading
-    weights_filename = f"{model_variant}_pretrained.pt"
-    weights_path = os.path.join(pretrained_dir, weights_filename)
-
-    # Download weights if they don't exist locally
-    url = pretrained_urls[model_variant]
-    logger.info(f"Downloading pre-trained weights for {model_variant} from {url}")
-
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-
-        # Get file size for progress bar
-        total_size = int(response.headers.get('content-length', 0))
-        block_size = 8192  # 8 KB
-
-        with open(weights_path, 'wb') as f, tqdm(
-                desc=f"Downloading {weights_filename}",
-                total=total_size,
-                unit='B',
-                unit_scale=True,
-                unit_divisor=1024,
-        ) as progress_bar:
-            for data in response.iter_content(block_size):
-                f.write(data)
-                progress_bar.update(len(data))
-
-        logger.info(f"Successfully downloaded pre-trained weights to: {weights_path}")
-        return weights_path
-
-    except Exception as e:
-        logger.error(f"Failed to download pre-trained weights: {str(e)}")
-        return None
 
 
 def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id, mlflow_tracking_uri):
@@ -95,28 +18,35 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
     logger.info(f"Using dataset: {dataset_info}")
     logger.info(f"Hyperparameters: {hyperparameters}")
 
+    # Ensure model_variant has .pt extension for YOLO class to auto-download
+    if not model_variant.endswith(".pt"):
+        model_weights_identifier = f"{model_variant}.pt"
+        logger.info(f"Model variant '{model_variant}' adjusted to '{model_weights_identifier}' for Ultralytics YOLO.")
+    else:
+        model_weights_identifier = model_variant
+
     # Create models directory if it doesn't exist
     models_dir = os.path.join(os.getcwd(), "models")
     if not os.path.exists(models_dir):
         os.makedirs(models_dir)
         logger.info(f"Created models directory: {models_dir}")
 
-    logger.info(f"Using pre-trained weights as requested in hyperparameters for variant {model_variant}")
-    pretrained_weights_path = download_pretrained_weights(model_variant)
-    if pretrained_weights_path:
-        logger.info(f"Pre-trained weights loaded from: {pretrained_weights_path}")
-    else:
-        logger.warning(f"Failed to download pre-trained weights for {model_variant}, continuing without them")
-
-    # Determine model path
-    model_filename = f"{model_variant}_{mlflow_run_id[:8]}.pt"
-    model_path = os.path.join(models_dir, model_filename)
+    # Determine model path for saving the trained model
+    # Use the original model_variant (without .pt) for a cleaner filename if preferred
+    base_model_name = model_variant.replace(".pt", "")
+    model_filename = f"{base_model_name}_{mlflow_run_id[:8]}_trained.pt"
+    trained_model_output_path = os.path.join(models_dir, model_filename)
 
     # Get training parameters
     total_epochs = int(hyperparameters.get('epochs', 100))
     batch_size = int(hyperparameters.get('batch_size', 16))
     img_size = int(hyperparameters.get('img_size', 640))
     learning_rate = float(hyperparameters.get('learning_rate', 0.01))
+    patience = int(hyperparameters.get('patience', 50))
+    project_name = hyperparameters.get('project', 'training_jobs')
+    experiment_name = hyperparameters.get('name', f"job_{mlflow_run_id[:8]}")
+    cache_dataset = hyperparameters.get('cache', False)
+    num_workers = int(hyperparameters.get('workers', 1))  # Defaulting to 1 for potentially lower memory usage
 
     # Get real dataset path
     dataset_path = dataset_info.get('dataset_path')
@@ -124,269 +54,277 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
 
     # Connect to MLFlow for logging if available
     mlflow_active = False
-    try:
-        import mlflow
-        mlflow.set_tracking_uri(mlflow_tracking_uri)
-        mlflow_active = True
-        logger.info("MLFlow logging enabled")
-    except Exception as e:
-        logger.warning(f"MLFlow logging disabled: {str(e)}")
-
-    # Import required modules for YOLO training
-    try:
-        import torch
-        from ultralytics import YOLO
-        from ultralytics import settings
-
-        # Handle PyTorch 2.6+ security changes for YOLO model loading
-        torch.serialization.add_safe_globals([DetectionModel, Conv, Conv2, C2f, SPPF, Detect])
-
-        # Initialize model with pretrained weights
-        logger.info(f"Loading pretrained YOLO model from {pretrained_weights_path}")
+    if mlflow_tracking_uri:
         try:
-            # Configure PyTorch to accept all globals for model loading (required for PyTorch 2.6+)
-            # This is safe since we're loading from official model sources
-            original_weights_only = torch._utils._weights_only_unpickler
-            torch._utils._weights_only_unpickler = False
+            mlflow.set_tracking_uri(mlflow_tracking_uri)
+            # Ensure the experiment exists or is created
+            experiment = mlflow.get_experiment_by_name(project_name)
+            if experiment is None:
+                mlflow.create_experiment(project_name)
+            mlflow.set_experiment(project_name)
 
-            # Use context manager to temporarily allow all globals for unpickling
-            with torch.serialization.safe_globals(['*']):
-                model = YOLO(pretrained_weights_path)
-
-            # Reset the setting after loading to maintain security
-            torch._utils._weights_only_unpickler = original_weights_only
-            logger.info(f"Successfully loaded model with safe_globals context")
-
+            mlflow_active = True
+            logger.info(f"MLFlow logging enabled. Tracking URI: {mlflow_tracking_uri}, Experiment: {project_name}")
         except Exception as e:
-            logger.warning(f"Error loading with safe_globals approach: {str(e)}")
+            logger.warning(f"MLFlow logging disabled: {str(e)}")
+    else:
+        logger.info("MLFlow tracking URI not provided. MLFlow logging will be skipped.")
 
-            try:
-                # Manual loading approach for YOLOv8 models
-                if model_variant.startswith('yolov8'):
-                    model = Model(model_variant)
-                    # Use torch.load with weights_only=False directly
-                    with torch.serialization.safe_globals(['*']):
-                        state_dict = torch.load(pretrained_weights_path, weights_only=False, map_location="cpu")
+    try:
+        logger.info(f"Initializing YOLO model with identifier: '{model_weights_identifier}'")
+        # YOLO class will download weights if model_weights_identifier is a known pretrained model like 'yolov8n.pt'
+        # and it's not found locally in the expected ultralytics cache.
+        model = YOLO(model_weights_identifier)
+        logger.info(f"Successfully initialized YOLO model: {model_weights_identifier}")
 
-                    # The Model class in ultralytics expects a certain structure
-                    if isinstance(state_dict, dict) and 'model' in state_dict:
-                        model.model.load_state_dict(state_dict['model'], strict=False)
-                    else:
-                        model.model.load_state_dict(state_dict, strict=False)
-                    logger.info(f"Loaded YOLOv8 model weights manually with weights_only=False")
-                else:
-                    raise ValueError("Model variant doesn't start with yolov8!")
-            except Exception as fallback_e:
-                logger.warning(f"All loading methods failed: {str(fallback_e)}")
-                # Final fallback - create a basic model without pretrained weights
-                logger.warning(
-                    "Using model without pretrained weights due to loading errors (THIS IS PROBABLY GOING TO FAIL!)")
-                model = YOLO(model_variant)
-
-        settings.update({'mlflow': True})
+        settings.update({'mlflow': mlflow_active})  # Update ultralytics settings for MLflow
 
         # Configure dataset
-        if not os.path.exists(dataset_path):
-            # Fallback for testing: use COCO8 example dataset
-            logger.warning(f"Dataset path {dataset_path} not found, using example dataset")
-            dataset_path = "coco8"
+        if not dataset_path or not os.path.exists(dataset_path):
+            logger.warning(
+                f"Dataset path '{dataset_path}' not found or not provided. Using COCO8 example dataset for training.")
+            dataset_path = "coco8.yaml"  # Ultralytics will download this if not present
         elif os.path.isdir(dataset_path):
-            # Verifica se esiste il file di configurazione data.yaml nella cartella
             yaml_path = os.path.join(dataset_path, "data.yaml")
             if os.path.exists(yaml_path):
-                logger.info(f"Usando il file di configurazione YAML esistente: {yaml_path}")
+                logger.info(f"Using existing dataset YAML configuration: {yaml_path}")
                 dataset_path = yaml_path
             else:
-                # Crea un file YAML temporaneo per il dataset
-                logger.info(f"Il dataset è una directory, creazione file YAML temporaneo")
-                import yaml
-
-                # Verifica la struttura del dataset
+                logger.info("Dataset path is a directory. Attempting to create a temporary data.yaml.")
                 train_dir = os.path.join(dataset_path, "train")
                 valid_dir = os.path.join(dataset_path, "valid")
-                test_dir = os.path.join(dataset_path, "test")
+                test_dir = os.path.join(dataset_path, "test")  # Optional
 
-                # Creazione configurazione YAML
+                # Check for images and labels subdirectories
+                train_images_exist = os.path.exists(os.path.join(train_dir, "images")) if os.path.exists(
+                    train_dir) else False
+                train_labels_exist = os.path.exists(os.path.join(train_dir, "labels")) if os.path.exists(
+                    train_dir) else False
+                valid_images_exist = os.path.exists(os.path.join(valid_dir, "images")) if os.path.exists(
+                    valid_dir) else False
+                valid_labels_exist = os.path.exists(os.path.join(valid_dir, "labels")) if os.path.exists(
+                    valid_dir) else False
+
                 yaml_config = {
-                    "path": dataset_path,
-                    "train": "train" if os.path.exists(train_dir) else "",
-                    "val": "valid" if os.path.exists(valid_dir) else "",
-                    "test": "test" if os.path.exists(test_dir) else "",
-                    "names": {}
+                    "path": os.path.abspath(dataset_path),  # Absolute path is often more robust
+                    "train": os.path.join("train", "images") if train_images_exist else "train",
+                    "val": os.path.join("valid", "images") if valid_images_exist else "valid",
                 }
+                if os.path.exists(test_dir) and os.path.exists(os.path.join(test_dir, "images")):
+                    yaml_config["test"] = os.path.join("test", "images")
+                elif os.path.exists(test_dir):  # if test dir exists but not test/images
+                    yaml_config["test"] = "test"
 
-                # Rileva automaticamente le classi dalle etichette nel set di training
-                if os.path.exists(train_dir):
-                    labels_dir = os.path.join(train_dir, "labels")
-                    if os.path.exists(labels_dir):
-                        class_ids = set()
-                        # Analizza i primi 10 file di etichette per rilevare le classi
-                        for label_file in os.listdir(labels_dir)[:10]:
-                            if label_file.endswith('.txt'):
-                                with open(os.path.join(labels_dir, label_file), 'r') as f:
-                                    for line in f:
-                                        parts = line.strip().split()
-                                        if parts and parts[0].isdigit():
-                                            class_ids.add(int(parts[0]))
+                # Auto-detect classes from labels in the training set
+                detected_classes = {}
+                if train_labels_exist:
+                    labels_dir_path = os.path.join(train_dir, "labels")
+                    class_ids = set()
+                    label_files = [f for f in os.listdir(labels_dir_path) if f.endswith('.txt')]
+                    for label_file in label_files[:max(20, len(label_files))]:  # Scan a sample of files
+                        try:
+                            with open(os.path.join(labels_dir_path, label_file), 'r') as f:
+                                for line in f:
+                                    parts = line.strip().split()
+                                    if parts and parts[0].isdigit():
+                                        class_ids.add(int(parts[0]))
+                        except Exception as e:
+                            logger.warning(f"Could not read or parse label file {label_file}: {e}")
 
-                        # Crea dizionario delle classi
-                        for class_id in sorted(class_ids):
-                            yaml_config["names"][class_id] = f"class{class_id}"
+                    if class_ids:
+                        for class_id in sorted(list(class_ids)):
+                            detected_classes[class_id] = f"class_{class_id}"
+                        logger.info(f"Auto-detected classes: {detected_classes}")
+                    else:
+                        logger.warning(
+                            "No classes detected from label files. MLFLow might not function correctly without them.")
 
-                # Se non sono state trovate classi, imposta valori predefiniti
-                if not yaml_config["names"]:
-                    yaml_config["names"] = {0: "class0", 1: "class1"}
+                if not detected_classes:  # Fallback if no classes are detected
+                    logger.warning(
+                        "No classes auto-detected. Using placeholder names: {0: 'object'}. Please verify your dataset structure and labels.")
+                    yaml_config["names"] = {0: "object"}
+                else:
+                    yaml_config["names"] = detected_classes
 
-                # Salva il file YAML
-                yaml_path = os.path.join(dataset_path, "data.yaml")
-                with open(yaml_path, 'w') as f:
-                    yaml.dump(yaml_config, f, sort_keys=False)
+                # Save the YAML file
+                generated_yaml_path = os.path.join(dataset_path, "autogenerated_data.yaml")
+                with open(generated_yaml_path, 'w') as f:
+                    yaml.dump(yaml_config, f, sort_keys=False, default_flow_style=None)
+                logger.info(f"Dataset YAML configuration created at: {generated_yaml_path}")
+                dataset_path = generated_yaml_path
+        elif not dataset_path.endswith(('.yaml', '.yml')):
+            logger.error(
+                f"Dataset path '{dataset_path}' is a file but not a YAML configuration. Please provide a directory or a .yaml file.")
+            raise ValueError("Invalid dataset path format.")
 
-                logger.info(f"File di configurazione YAML creato: {yaml_path}")
-                dataset_path = yaml_path
-
-        # Log train command details for debugging
         logger.info(f"Starting YOLO training with dataset: {dataset_path}")
         logger.info(f"Epochs: {total_epochs}, Batch size: {batch_size}, Image size: {img_size}")
-        logger.info(f"Learning rate: {learning_rate}")
+        logger.info(f"Learning rate: {learning_rate}, Patience: {patience}")
+        logger.info(f"Project: {project_name}, Experiment Name: {experiment_name}")
+        logger.info(f"Cache dataset: {cache_dataset}, Workers: {num_workers}")
 
-        # Train the model with real hyperparameters
-        try:
-            # Riduci dimensioni batch e risoluzione immagine se necessario
-            adjusted_batch = min(batch_size, 8)  # Riduci il batch size massimo
-            adjusted_size = min(img_size, 416)  # Riduci la dimensione massima immagine
-
-            results = model.train(
-                data=dataset_path,
-                epochs=total_epochs,
-                batch=adjusted_batch,
-                imgsz=adjusted_size,
-                lr0=learning_rate,
-                patience=50,
-                save=True,
-                project="training_jobs",
-                name=f"job_{mlflow_run_id[:8]}",
-                cache=False,  # Disabilita la cache per risparmiare memoria
-                workers=1  # Riduci il numero di worker per ridurre la memoria
-            )
-            logger.info(f"Training completed successfully. Results: {results.results_dict}")
-        except Exception as e:
-            logger.error(f"Error during YOLO training: {str(e)}")
-            # Print detailed error traceback
-            import traceback
-            logger.error(f"Detailed traceback: {traceback.format_exc()}")
-            raise
-
-        # Get metrics from results
-        final_metrics = results.results_dict
-
-        # Extract metrics for reporting
-        precision = final_metrics.get('metrics/precision(B)', 0.0)
-        recall = final_metrics.get('metrics/recall(B)', 0.0)
-        mAP50 = final_metrics.get('metrics/mAP50(B)', 0.0)
-        mAP50_95 = final_metrics.get('metrics/mAP50-95(B)', 0.0)
-
-        # Save the trained model - use the best.pt file directly instead of exporting
-        trained_model_path = os.path.join(
-            os.getcwd(),
-            f"training_jobs/job_{mlflow_run_id[:8]}/weights/best.pt"
-        )
-        if os.path.exists(trained_model_path):
-            import shutil
-            shutil.copy2(trained_model_path, model_path)
-            logger.info(f"Model saved to: {model_path}")
-        else:
-            logger.warning(f"Trained model not found at {trained_model_path}, saving current model")
-            # Use the trained model directly
-            model.save(model_path)
-
-        # Log the model artifact to MLFlow if available
+        # Start MLflow run if active
+        active_mlflow_run = None
         if mlflow_active:
             try:
-                # Log final metrics to MLFlow
-                final_metrics_dict = {
-                    "precision": float(precision),
-                    "recall": float(recall),
-                    "mAP50": float(mAP50),
-                    "mAP50-95": float(mAP50_95),
-                    "epochs_completed": int(total_epochs)
-                }
-
-                # Log metrics one by one to ensure success
-                for metric_name, metric_value in final_metrics_dict.items():
-                    try:
-                        mlflow.log_metric(metric_name, metric_value)
-                        logger.info(f"Logged metric {metric_name}={metric_value} to MLFlow")
-                    except Exception as e:
-                        logger.warning(f"Failed to log metric {metric_name}: {str(e)}")
-
-                # Verify if run_id is active
-                try:
-                    active_run = mlflow.active_run()
-                    if active_run is None:
-                        logger.info(f"No active MLFlow run. Starting run with ID: {mlflow_run_id}")
-                        mlflow.start_run(run_id=mlflow_run_id)
-                except Exception as e:
-                    logger.warning(f"Error checking active run: {str(e)}")
-
-                # Log model artifact
-                if os.path.exists(model_path):
-                    mlflow.log_artifact(model_path, artifact_path="model")
-                    logger.info(f"Model artifact logged to MLFlow: {model_path}")
-
-                # Log plot images as artifacts
-                results_dir = os.path.join(os.getcwd(), f"training_jobs/job_{mlflow_run_id[:8]}")
-                if os.path.exists(results_dir):
-                    for root, _, files in os.walk(results_dir):
-                        for file in files:
-                            if file.endswith(('.png', '.jpg')) and not file.startswith('.'):
-                                img_path = os.path.join(root, file)
-                                if os.path.exists(img_path):
-                                    rel_path = os.path.relpath(root, results_dir)
-                                    mlflow.log_artifact(img_path, artifact_path=f"plots/{rel_path}")
-                                    logger.info(f"Logged plot to MLFlow: {img_path}")
-
-                logger.info(f"All metrics and artifacts logged to MLFlow")
+                active_mlflow_run = mlflow.start_run(run_id=mlflow_run_id, run_name=experiment_name, nested=True)
+                logger.info(f"Started MLFlow run with ID: {active_mlflow_run.info.run_id} and name: {experiment_name}")
+                # Log hyperparameters
+                mlflow.log_params({
+                    "model_variant": model_variant,
+                    "epochs": total_epochs,
+                    "batch_size": batch_size,
+                    "img_size": img_size,
+                    "learning_rate": learning_rate,
+                    "patience": patience,
+                    "dataset": dataset_path,
+                    "project_ultralytics": project_name,  # ultralytics project
+                    "name_ultralytics": experiment_name  # ultralytics experiment name
+                })
             except Exception as e:
-                logger.warning(f"Failed to log to MLFlow: {str(e)}")
-                import traceback
-                logger.debug(f"MLFlow error details: {traceback.format_exc()}")
+                logger.warning(
+                    f"Failed to start MLFlow run or log parameters: {str(e)}. Training will continue without MLFlow logging for this run.")
+                mlflow_active = False  # Disable further MLflow attempts for this training
+
+        logger.warning(f"DATASET PATH: {dataset_path}")
+
+        # Train the model
+        results = model.train(
+            data=dataset_path,
+            epochs=total_epochs,
+            batch=batch_size,
+            imgsz=img_size,
+            lr0=learning_rate,
+            patience=patience,
+            save=True,  # Ultralytics saves checkpoints and final model
+            project=project_name,  # Ultralytics' own project folder
+            name=experiment_name,  # Ultralytics' own run name folder
+            exist_ok=True,  # Allow re-running into the same folder
+            cache=cache_dataset,
+            workers=num_workers,
+            # Other parameters can be added here e.g. device, optimizer etc.
+        )
+
+        logger.info(f"Training completed. Results object: {results}")
+        logger.info(f"Metrics keys available: {results.results_dict.keys()}")
+
+        # The 'best.pt' model is saved by ultralytics in project/name/weights/best.pt
+        # The 'last.pt' model is also available.
+        ultralytics_output_dir = os.path.join(os.getcwd(), project_name, experiment_name)
+        best_model_from_ultralytics = os.path.join(ultralytics_output_dir, "weights", "best.pt")
+
+        if os.path.exists(best_model_from_ultralytics):
+            shutil.copy2(best_model_from_ultralytics, trained_model_output_path)
+            logger.info(f"Best trained model copied to: {trained_model_output_path}")
+        else:
+            logger.warning(f"Could not find 'best.pt' at {best_model_from_ultralytics}. Check training output.")
+            # Fallback: try to save the 'last' model if available, or the current model state.
+            last_model_from_ultralytics = os.path.join(ultralytics_output_dir, "weights", "last.pt")
+            if os.path.exists(last_model_from_ultralytics):
+                shutil.copy2(last_model_from_ultralytics, trained_model_output_path)
+                logger.info(f"Last trained model copied to: {trained_model_output_path}")
+            else:
+                model.save(trained_model_output_path)  # Save current state of the model object
+                logger.info(f"Saved current model state to: {trained_model_output_path}")
+
+        # Log metrics to MLFlow
+        if mlflow_active and active_mlflow_run:
+            final_metrics = results.results_dict
+            metrics_to_log = {
+                "precision": final_metrics.get('metrics/precision(B)', 0.0),
+                "recall": final_metrics.get('metrics/recall(B)', 0.0),
+                "mAP50": final_metrics.get('metrics/mAP50(B)', 0.0),
+                "mAP50-95": final_metrics.get('metrics/mAP50-95(B)', 0.0),
+                "fitness": final_metrics.get('fitness', 0.0)  # Often a key metric for ultralytics
+            }
+            # Ultralytics might also log epochs if training completes fully via its own callback
+            # We can log the requested epochs or try to find completed epochs
+            epochs_completed = results.epoch if hasattr(results,
+                                                        'epoch') and results.epoch is not None else total_epochs
+            metrics_to_log["epochs_completed"] = float(epochs_completed)
+
+            logger.info(f"Logging final metrics to MLFlow: {metrics_to_log}")
+            for metric_name, metric_value in metrics_to_log.items():
+                try:
+                    mlflow.log_metric(metric_name, float(metric_value))
+                except Exception as e:
+                    logger.warning(f"Failed to log metric {metric_name}={metric_value} to MLFlow: {str(e)}")
+
+            # Log model artifact
+            if os.path.exists(trained_model_output_path):
+                mlflow.log_artifact(trained_model_output_path, artifact_path="model")
+                logger.info(f"Trained model artifact logged to MLFlow: {trained_model_output_path}")
+            else:
+                logger.warning(f"Trained model file {trained_model_output_path} not found for MLFlow logging.")
+
+            # Log plot images and other artifacts generated by Ultralytics
+            if os.path.exists(ultralytics_output_dir):
+                # Log common result files/plots
+                files_to_log = [
+                    "results.csv", "confusion_matrix.png", "F1_curve.png",
+                    "P_curve.png", "PR_curve.png", "R_curve.png",
+                    "labels.jpg", "labels_correlogram.jpg",
+                    "val_batch0_labels.jpg", "val_batch0_pred.jpg"  # example validation batch
+                ]
+                for f_name in files_to_log:
+                    f_path = os.path.join(ultralytics_output_dir, f_name)
+                    if os.path.exists(f_path):
+                        try:
+                            mlflow.log_artifact(f_path, artifact_path="training_plots")
+                            logger.info(f"Logged artifact {f_name} to MLFlow.")
+                        except Exception as e:
+                            logger.warning(f"Failed to log artifact {f_path} to MLFlow: {e}")
+                # Log all PNGs and JPGs if not already covered
+                for root, _, files in os.walk(ultralytics_output_dir):
+                    for file in files:
+                        if file.endswith(('.png', '.jpg')) and file not in files_to_log:
+                            img_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(root, ultralytics_output_dir)
+                            artifact_sub_path = os.path.join("training_plots",
+                                                             rel_path) if rel_path != '.' else "training_plots"
+                            try:
+                                mlflow.log_artifact(img_path, artifact_path=artifact_sub_path)
+                                logger.info(f"Logged plot to MLFlow: {img_path} under {artifact_sub_path}")
+                            except Exception as e:
+                                logger.warning(f"Failed to log plot {img_path} to MLFlow: {e}")
+            logger.info("MLFlow logging for metrics and artifacts completed.")
 
         # Return training results
-        return {
-            "model_path": model_path,
-            "results": {
-                "precision": precision,
-                "recall": recall,
-                "mAP50": mAP50,
-                "mAP50-95": mAP50_95
-            }
+        return_results = {
+            "model_path": trained_model_output_path if os.path.exists(trained_model_output_path) else None,
+            "metrics": {
+                "precision": final_metrics.get('metrics/precision(B)', 0.0),
+                "recall": final_metrics.get('metrics/recall(B)', 0.0),
+                "mAP50": final_metrics.get('metrics/mAP50(B)', 0.0),
+                "mAP50-95": final_metrics.get('metrics/mAP50-95(B)', 0.0),
+                "epochs_completed": epochs_completed,
+                "fitness": final_metrics.get('fitness', 0.0)
+            },
+            "ultralytics_output_dir": ultralytics_output_dir
         }
 
     except Exception as e:
-        logger.exception(f"Error in YOLO training: {str(e)}")
-        # Fall back to pretrained weights if training failed
-        if pretrained_weights_path and os.path.exists(pretrained_weights_path):
-            import shutil
-            shutil.copy2(pretrained_weights_path, model_path)
-            logger.warning(f"Training failed, using pretrained weights: {pretrained_weights_path}")
-            # Return results with error info
-            return {
-                "model_path": model_path,
-                "results": {
-                    "precision": 0.0,
-                    "recall": 0.0,
-                    "mAP50": 0.0,
-                    "mAP50-95": 0.0,
-                    "error": str(e),
-                    "info": "Using pretrained weights due to training error"
-                }
-            }
-        else:
-            # Return error without model
-            return {
-                "model_path": None,
-                "results": {
-                    "error": str(e)
-                }
-            }
+        logger.error(f"Error during YOLO training pipeline: {str(e)}")
+        logger.error(f"Detailed traceback: {traceback.format_exc()}")
+        # Fallback: if an initial model identifier was provided (implying pretrained),
+        # try to report that as the model path, though training failed.
+        # Ultralytics might have downloaded it to its cache.
+        # This part is tricky as we don't have a specific 'pretrained_weights_path' anymore.
+        # The best we can do is signal failure.
+        return_results = {
+            "model_path": None,  # Training failed, so no new trained model path
+            "metrics": {
+                "error": str(e),
+                "info": f"Training failed for model variant {model_variant}. Check logs for details. Attempted to use '{model_weights_identifier}' as base."
+            },
+            "ultralytics_output_dir": None
+        }
+    finally:
+        if mlflow_active and active_mlflow_run:
+            try:
+                mlflow.end_run()
+                logger.info(f"Ended MLFlow run: {active_mlflow_run.info.run_id}")
+            except Exception as e:
+                logger.warning(f"Error ending MLFlow run: {str(e)}")
+
+    return return_results
