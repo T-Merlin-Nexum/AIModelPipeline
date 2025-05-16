@@ -1,10 +1,12 @@
 import logging
 import threading
+import traceback
 import uuid
 
 import yaml
 
 from rfdetr_training import train_rfdetr_model
+from yolo_coco_converter import convert_coco_to_yolo
 from yolo_training import train_yolo_model
 
 # Set up logging
@@ -114,14 +116,16 @@ class DirectTrainingPipeline:
                         # Salva il file YAML
                         with open(yaml_path, 'w') as f:
                             yaml.dump(yaml_config, f, default_flow_style=False)
-
-                logger.info(
-                    f"Found dataset at {dataset_path} with format {dataset.format_type}"
-                )
-                return {
-                    "dataset_path": dataset_path,
-                    "format_type": dataset.format_type
-                }
+                else:
+                    logger.info(f"Detected COCO format dataset at {dataset_path}. Converting to YOLO format...")
+                    try:
+                        dataset_path = convert_coco_to_yolo(dataset_path)
+                        logger.info(f"Dataset successfully converted to YOLO format. Using: {dataset_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to convert COCO dataset to YOLO format: {str(e)}")
+                        logger.error(f"Detailed traceback: {traceback.format_exc()}")
+                        # Continua con il dataset originale
+                        logger.warning(f"Continuing with original dataset path: {dataset_path}")
 
                 logger.info(
                     f"Found dataset at {dataset_path} with format {dataset.format_type}"
@@ -133,7 +137,7 @@ class DirectTrainingPipeline:
         except Exception as e:
             logger.exception(f"Error loading dataset: {str(e)}")
             # Return default path when exceptions occur
-            return {"dataset_path": f"coco8", "format_type": "yolo"}
+            return {"dataset_path": "coco8", "format_type": "yolo"}
 
     def train_model(self, dataset_info, model_variant, hyperparameters,
                     mlflow_run_id, mlflow_tracking_uri):
