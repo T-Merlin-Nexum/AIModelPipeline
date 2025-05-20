@@ -228,19 +228,20 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
                 logger.info(f"Saved current model state to: {trained_model_output_path}")
 
         # Log metrics to MLFlow
-        final_metrics = results.get('results_dict')
-        metrics_to_log = {
-            "precision": final_metrics.get('metrics/precision(B)', 0.0),
-            "recall": final_metrics.get('metrics/recall(B)', 0.0),
-            "mAP50": final_metrics.get('metrics/mAP50(B)', 0.0),
-            "mAP50-95": final_metrics.get('metrics/mAP50-95(B)', 0.0),
-            "fitness": final_metrics.get('fitness', 0.0)  # Often a key metric for ultralytics
-        }
+        final_metrics = results.box
+
         # Ultralytics might also log epochs if training completes fully via its own callback
         # We can log the requested epochs or try to find completed epochs
         epochs_completed = results.epoch if hasattr(results,
                                                     'epoch') and results.epoch is not None else total_epochs
-        metrics_to_log["epochs_completed"] = float(epochs_completed)
+        metrics_to_log = {
+            "precision": final_metrics.mp,
+            "recall": final_metrics.mr,
+            "mAP50": final_metrics.map50,
+            "mAP50-95": final_metrics.map,
+            "epochs_completed": epochs_completed,
+            "fitness": final_metrics.fitness()
+        }
 
         logger.info(f"Logging final metrics to MLFlow: {metrics_to_log}")
         for metric_name, metric_value in metrics_to_log.items():
@@ -291,13 +292,13 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
         # Return training results
         return_results = {
             "model_path": trained_model_output_path if os.path.exists(trained_model_output_path) else None,
-            "metrics": {
-                "precision": final_metrics.get('metrics/precision(B)', 0.0),
-                "recall": final_metrics.get('metrics/recall(B)', 0.0),
-                "mAP50": final_metrics.get('metrics/mAP50(B)', 0.0),
-                "mAP50-95": final_metrics.get('metrics/mAP50-95(B)', 0.0),
+            "results": {
+                "precision": final_metrics.mp,
+                "recall": final_metrics.mr,
+                "mAP50": final_metrics.map50,
+                "mAP50-95": final_metrics.map,
                 "epochs_completed": epochs_completed,
-                "fitness": final_metrics.get('fitness', 0.0)
+                "fitness": final_metrics.fitness()
             },
             "ultralytics_output_dir": ultralytics_output_dir
         }
@@ -312,7 +313,7 @@ def train_yolo_model(dataset_info, model_variant, hyperparameters, mlflow_run_id
         # The best we can do is signal failure.
         return_results = {
             "model_path": None,  # Training failed, so no new trained model path
-            "metrics": {
+            "results": {
                 "error": str(e),
                 "info": f"Training failed for model variant {model_variant}. Check logs for details. Attempted to use '{model_weights_identifier}' as base."
             },
